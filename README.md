@@ -1,4 +1,12 @@
-# TES5Edit Rust JSON
+<p align="center">
+  <img src="docs/assets/skyrim-logo.png" alt="The Elder Scrolls V: Skyrim icon" width="128">
+  &nbsp;&nbsp;&nbsp;&nbsp;
+  <img src="docs/assets/dear-imgui-logo.jpg" alt="Dear ImGui logo" width="360">
+</p>
+
+<h1 align="center">TES5Edit Rust JSON</h1>
+
+<p align="center"><em>Made by GPT-5.6</em></p>
 
 A Windows desktop utility that structurally converts Skyrim `.esp`, `.esm`, and `.esl` plugins to editable JSON and rebuilds plugins from that JSON.
 
@@ -70,3 +78,8 @@ tes5edit-rust-json to-json MyMod.esp MyMod.esp.json
 tes5edit-rust-json to-json-pack MyMod.esp MyMod.esp.json-pack
 tes5edit-rust-json from-json MyMod.esp.json Rebuilt.esp
 ```
+
+## Artwork credits
+
+- [Dear ImGui logo](https://www.dearimgui.com/) by Albane Kim.
+- [Skyrim icon](https://commons.wikimedia.org/wiki/File:Skyrim_logo.png) by Bethesda Software, distributed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The image is reproduced without modification.
