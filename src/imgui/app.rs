@@ -2,19 +2,34 @@ use std::{fs, path::PathBuf};
 
 use eframe::egui;
 use tes5edit_rust_json::{
-    inspect_json_input, parse_file, read_json_input, write_file, write_json_pack,
+    ParseOptions, inspect_json_input, parse_file_with_options, read_json_input, write_file,
+    write_json_pack,
 };
 
 use super::components::output_log::OutputLog;
 
-#[derive(Default)]
 pub struct App {
     plugins: Vec<PathBuf>,
     output_dir: Option<PathBuf>,
     split_json_pack: bool,
+    preserve_byte_identical: bool,
     json_input: Option<PathBuf>,
     json_input_description: String,
     output_log: OutputLog,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            plugins: Vec::new(),
+            output_dir: None,
+            split_json_pack: true,
+            preserve_byte_identical: false,
+            json_input: None,
+            json_input_description: String::new(),
+            output_log: OutputLog::default(),
+        }
+    }
 }
 
 impl eframe::App for App {
@@ -43,6 +58,10 @@ impl eframe::App for App {
             ui.checkbox(
                 &mut self.split_json_pack,
                 "Build multiple JSON files grouped by top-level signature",
+            );
+            ui.checkbox(
+                &mut self.preserve_byte_identical,
+                "Preserve original compressed bytes for byte-identical round trips",
             );
             if ui
                 .add_enabled(
@@ -102,7 +121,12 @@ impl App {
             let mut json_file_count = 0;
             let mut exact_destination = None;
             for input in &self.plugins {
-                let plugin = parse_file(input)?;
+                let plugin = parse_file_with_options(
+                    input,
+                    ParseOptions {
+                        preserve_original_compression: self.preserve_byte_identical,
+                    },
+                )?;
                 let name = format!("{}.json", input.file_name().unwrap().to_string_lossy());
                 if self.split_json_pack {
                     let pack_dir = output.join(format!("{name}-pack"));

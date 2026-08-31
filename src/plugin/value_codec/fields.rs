@@ -72,6 +72,17 @@ pub(super) fn is_form_id(record: &str, signature: &str) -> bool {
             signature,
             "JAIL" | "WAIT" | "STOL" | "PLCN" | "CRGR" | "JOUT" | "VEND" | "VENC"
         ),
+        "SOUN" => signature == "SDSC",
+        "SNDR" => matches!(signature, "GNAM" | "SNAM" | "ONAM"),
+        "DIAL" => matches!(signature, "BNAM" | "QNAM"),
+        "MESG" => signature == "INAM",
+        "PACK" => signature == "INAM",
+        "COBJ" => matches!(signature, "CNAM" | "BNAM"),
+        "ARMA" => matches!(
+            signature,
+            "RNAM" | "NAM0" | "NAM1" | "NAM2" | "NAM3" | "MODL" | "SNDD" | "ONAM"
+        ),
+        "ALCH" => matches!(signature, "YNAM" | "ZNAM" | "ETYP" | "EFID"),
         _ => false,
     }
 }
@@ -83,6 +94,7 @@ pub(super) fn is_form_id_array(record: &str, signature: &str) -> bool {
             | ("OTFT", "INAM")
             | ("NPC_" | "ARMO" | "MGEF" | "SPEL" | "RACE", "KWDA")
             | ("RACE", "VTCK" | "DNAM" | "HCLF" | "HNAM" | "ENAM")
+            | ("ALCH", "KWDA")
     )
 }
 
@@ -98,6 +110,14 @@ pub(super) fn is_zstring(record: &str, signature: &str) -> bool {
                 "RACE",
                 "ANAM" | "MTNM" | "MODL" | "NAME" | "PHTN" | "TINT" | "ATKE"
             )
+            | (
+                "TXST",
+                "TX00" | "TX01" | "TX02" | "TX03" | "TX04" | "TX05" | "TX06" | "TX07"
+            )
+            | ("ARMA", "MOD2" | "MOD3" | "MOD4" | "MOD5")
+            | ("ALCH", "MODL" | "ICON")
+            | ("SNDR", "ANAM")
+            | ("PACK", "ANAM" | "BNAM")
     )
 }
 
@@ -110,13 +130,18 @@ pub(super) fn is_localized_string(record: &str, signature: &str) -> bool {
             | ("SPEL", "FULL" | "DESC")
             | ("RACE", "FULL" | "DESC")
             | ("FACT", "FULL" | "MNAM" | "FNAM")
+            | ("ALCH", "FULL" | "DESC")
+            | ("MESG", "DESC" | "FULL" | "ITXT")
+            | ("DIAL", "FULL")
     )
 }
 
 pub(super) fn is_empty(record: &str, signature: &str) -> bool {
     matches!(
         (record, signature),
-        ("NPC_", "DATA") | ("RACE", "MNAM" | "FNAM" | "NAM0" | "NAM1" | "NAM2" | "NAM3")
+        ("NPC_", "DATA")
+            | ("RACE", "MNAM" | "FNAM" | "NAM0" | "NAM1" | "NAM2" | "NAM3")
+            | ("PACK", "POBA" | "POCA" | "POEA")
     )
 }
 
@@ -129,20 +154,29 @@ pub(super) fn is_u32(record: &str, signature: &str) -> bool {
             | ("MGEF", "KSIZ")
             | ("SPEL", "KSIZ")
             | ("RACE", "SPCT" | "KSIZ" | "VNAM" | "INDX")
+            | ("ALCH", "KSIZ")
+            | ("COBJ", "COCT")
+            | ("MESG", "DNAM" | "TNAM")
+            | ("SNDR", "CNAM")
+            | ("DIAL", "TIFC")
+            | ("DIAL", "SNAM")
     )
 }
 
 pub(super) fn is_f32(record: &str, signature: &str) -> bool {
     matches!(
         (record, signature),
-        ("NPC_", "NAM6" | "NAM7") | ("RACE", "PNAM" | "UNAM" | "TINV")
+        ("NPC_", "NAM6" | "NAM7") | ("RACE", "PNAM" | "UNAM" | "TINV") | ("DIAL", "PNAM")
     )
 }
 
 pub(super) fn is_u16(record: &str, signature: &str) -> bool {
     matches!(
         (record, signature),
-        ("NPC_", "TINI") | ("RACE", "TINL" | "TINI" | "TINP" | "TIRS")
+        ("NPC_", "TINI")
+            | ("RACE", "TINL" | "TINI" | "TINP" | "TIRS")
+            | ("COBJ", "NAM1")
+            | ("TXST", "DNAM")
     )
 }
 

@@ -43,23 +43,23 @@ The converter follows xEdit's TES5 binary layer in `Core/wbImplementation.pas` a
 - record flag `0x00040000`, a 32-bit uncompressed-size prefix, and zlib data
 - xEdit's four-byte signatures containing control bytes, including IMAD's `#00IAD` family
 
-Version-2 JSON keeps record structure readable: each subrecord contains a small `data_ref`, while the Base64 payloads live in the final top-level `blobs` object. For fields backed by a verified SSEEdit definition, an editable `value` is also emitted (for example `EDID` as a `zstring`, FLST/FSTP references as hexadecimal `form_id` values, colors as RGBA channels, and selected numeric primitives). When `value` is present the writer rebuilds the bytes from it; remove `value` to edit the raw blob directly. `text_preview` is informational. Header values, ordering, group hierarchy, unknown fields, and compression state are preserved.
+Version-3 JSON makes `value` the single authoritative source for every subrecord. Fields backed by a verified SSEEdit definition receive an editable semantic value (for example `EDID` as a `zstring`, FLST/FSTP references as hexadecimal `form_id` values, colors as RGBA channels, and selected compound structures). Payloads whose semantic schema is not implemented yet use an explicit inline `raw_bytes` value. New exports do not create `data_ref` entries or duplicate typed values in a blob table. `text_preview` is informational. Header values, ordering, group hierarchy, unknown fields, and compression state are preserved.
 
 Schema-aware coverage includes the commonly edited fields of NPCs, leveled actors/items, magic effects, spells, outfits, armor, factions, and races. Major compound values include `NPC_.ACBS` Configuration, AI and player skills; leveled-list entries and extra data; the complete 152-byte `MGEF.DATA`; spell metadata and effect parameters; outfit item arrays; armor biped/data/rating fields; faction relations, flags, crime and vendor settings; and the complete 164-byte `RACE.DATA`, attacks, biped slots, tint references, and phoneme weights. Known fields also include xEdit's `display_name` beside their signature. Unknown bits are retained explicitly, and unsupported or context-dependent data remains in its lossless blob.
 
 The `TES4` main header exposes named master/localized/light-plugin flags, header version, record count, next object ID, author, description, master dependencies, master metadata, overridden forms, and interior-cell count. Raw unknown flag bits remain explicit and lossless.
 
-The reader remains compatible with version-1 JSON that stores `data_base64` inline.
+The reader remains compatible with version-2 JSON containing `data_ref` entries. Version 1 is no longer a supported compatibility target.
 
-The GUI can optionally export a JSON pack named `<plugin>.json-pack`. It contains `TES4.json` plus one JSON fragment for each top-level group signature (`KYWD.json`, `TXST.json`, and so on). Those fragments contain only blob IDs; the shared `__blobs__.json` file maps every ID to its Base64 value. `pack-manifest.json` preserves the original top-level order for exact reconstruction. Folder import automatically loads the manifest, shared blob dictionary, and fragments before writing the plugin.
+The GUI can optionally export a JSON pack named `<plugin>.json-pack`. It contains `TES4.json` plus one JSON fragment for each top-level group signature (`KYWD.json`, `TXST.json`, and so on). `pack-manifest.json` preserves the original top-level order. Clean packs contain no blob file; when byte-identical compression preservation is enabled, `__blobs__.json` stores only original compressed streams.
 
 `form_id` values are emitted as fixed-width hexadecimal strings (for example, `"0x0300AB61"`). The reader also accepts decimal `form_id` values from JSON created by older releases. The redundant `compressed` property is omitted; compression is derived from the record flags.
 
 Numeric record/group header fields whose value is zero are omitted from JSON and restored as zero when imported. This includes zero-valued `flags`, `form_id`, `revision`, `version`, `unknown`, `label`, `group_type`, and `stamp` fields.
 
-Compressed records retain an `original_compressed_ref` into the same blob table. If their subrecords are unchanged, the writer reuses those exact bytes for a byte-identical round trip. If a subrecord is edited, the writer detects the change and creates a fresh valid zlib stream.
+The GUI's default-off byte-identical checkbox controls preservation of original compressed streams. When enabled, compressed records retain an `original_compressed_ref`; unchanged records reuse those exact bytes. Clean exports omit that reference and the writer creates a fresh valid zlib stream from the authoritative values.
 
-This remains deliberately conservative rather than pretending to be xEdit's entire schema engine. The TES4 localization flag is honored: ordinary strings become editable text and localized strings become explicit string-table IDs. Resolving those IDs to translated text still requires external `.STRINGS` files. VMAD, conditions, models' opaque hash data, and a few sequence-dependent arrays remain blob-backed. That choice keeps unknown and unsupported records round-trip safe.
+This remains deliberately conservative rather than pretending to be xEdit's entire schema engine. The TES4 localization flag is honored: ordinary strings become editable text and localized strings become explicit string-table IDs. Resolving those IDs to translated text still requires external `.STRINGS` files. VMAD, conditions, models' opaque hash data, and a few sequence-dependent arrays remain explicit inline `raw_bytes` values until dedicated codecs are implemented.
 
 ## Build and run
 

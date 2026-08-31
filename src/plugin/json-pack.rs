@@ -84,17 +84,20 @@ pub fn write_json_pack(plugin: &Plugin, pack_dir: impl AsRef<Path>) -> Result<Js
         });
     }
 
-    let json_file_count = fragments.len() + 2; // fragments + __blobs__ + manifest
+    let has_blobs = !plugin.blobs.is_empty();
+    let json_file_count = fragments.len() + 1 + usize::from(has_blobs);
     let manifest = PackManifest {
         format: "tes5edit-rust-json-pack/v1".into(),
         source_file: plugin.source_file.clone(),
-        blob_file: Some(BLOBS_NAME.into()),
+        blob_file: has_blobs.then(|| BLOBS_NAME.into()),
         fragments,
     };
-    fs::write(
-        pack_dir.join(BLOBS_NAME),
-        serde_json::to_vec_pretty(&plugin.blobs)?,
-    )?;
+    if has_blobs {
+        fs::write(
+            pack_dir.join(BLOBS_NAME),
+            serde_json::to_vec_pretty(&plugin.blobs)?,
+        )?;
+    }
     fs::write(
         pack_dir.join(MANIFEST_NAME),
         serde_json::to_vec_pretty(&manifest)?,

@@ -1,4 +1,5 @@
 use anyhow::{Context, Result, bail, ensure};
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use serde::{Deserialize, Serialize};
 
 mod display_names;
@@ -30,6 +31,13 @@ pub struct MagicEffectSound {
     pub sound: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ModelTextureHash {
+    pub file_hash: String,
+    pub extension: String,
+    pub folder_hash: String,
+}
+
 /// Editable payloads whose binary representation is unambiguous in TES5.
 ///
 /// xEdit defines fields per record, not merely per subrecord signature.  This
@@ -38,6 +46,11 @@ pub struct MagicEffectSound {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SubrecordValue {
+    /// Authoritative bytes for a payload whose semantic schema is not yet
+    /// implemented. This keeps clean JSON self-contained without a blob table.
+    RawBytes {
+        base64: String,
+    },
     Zstring {
         text: String,
     },
@@ -83,6 +96,9 @@ pub enum SubrecordValue {
     },
     U8 {
         value: u8,
+    },
+    I8 {
+        value: i8,
     },
     U16 {
         value: u16,
@@ -330,6 +346,80 @@ pub enum SubrecordValue {
         template_flags_unknown_bits: String,
         health_offset: i16,
         bleedout_override: u16,
+    },
+    RelationshipData {
+        parent: String,
+        child: String,
+        rank: u16,
+        unknown: u8,
+        flags: u8,
+        association_type: String,
+    },
+    SoundDescriptorValues {
+        frequency_shift_percent: i8,
+        frequency_variance_percent: i8,
+        priority: u8,
+        db_variance: u8,
+        static_attenuation_db: f32,
+    },
+    SoundLoopValues {
+        unknown_1: u8,
+        looping: u8,
+        unknown_2: u8,
+        rumble_send_value: u8,
+    },
+    ArmorAddonData {
+        male_priority: u8,
+        female_priority: u8,
+        male_weight_slider: u8,
+        female_weight_slider: u8,
+        unknown_1: String,
+        detection_sound_value: u8,
+        unknown_2: u8,
+        weapon_adjust: f32,
+    },
+    IngestibleEffectData {
+        value: i32,
+        flags: u32,
+        addiction: String,
+        addiction_chance: f32,
+        consume_sound: String,
+    },
+    DialogueData {
+        do_all_before_repeating: bool,
+        category: u8,
+        subtype: u16,
+    },
+    PackageData {
+        general_flags: u32,
+        package_type: u8,
+        interrupt_override: u8,
+        preferred_speed: u8,
+        unknown_1: u8,
+        interrupt_flags: u16,
+        unknown_2: String,
+    },
+    PackageSchedule {
+        month: i8,
+        day_of_week: i8,
+        date: i8,
+        hour: i8,
+        minute: i8,
+        unused: String,
+        duration_minutes: u32,
+    },
+    PackageCounter {
+        data_input_count: u32,
+        package_template: String,
+        version_counter: u32,
+    },
+    PackageTopicData {
+        topic_type: u32,
+        data: String,
+    },
+    ModelInformation {
+        textures: Vec<ModelTextureHash>,
+        addon_nodes: Vec<u32>,
     },
 }
 
@@ -611,7 +701,7 @@ pub fn decode_with_localization(
             max_y: read_i16(bytes, 8),
             max_z: read_i16(bytes, 10),
         }),
-        ("ARMO" | "RACE", "BOD2", 8) => {
+        ("ARMO" | "ARMA" | "RACE", "BOD2", 8) => {
             let (slots, slots_unknown_bits) =
                 decode_named_flags(read_u32(bytes, 0), BIPED_SLOT_NAMES);
             Some(SubrecordValue::BipedBodyTemplate {
@@ -650,7 +740,7 @@ pub fn decode_with_localization(
                 ids: bytes.chunks_exact(4).map(form_id_text).collect(),
             })
         }
-        ("NPC_", "CNTO", 8) => Some(SubrecordValue::InventoryItem {
+        ("NPC_" | "COBJ", "CNTO", 8) => Some(SubrecordValue::InventoryItem {
             item: hex_u32(read_u32(bytes, 0)),
             count: read_i32(bytes, 4),
         }),
@@ -746,7 +836,7 @@ pub fn decode_with_localization(
                 half_cost_perk: hex_u32(read_u32(bytes, 32)),
             })
         }
-        ("SPEL", "EFIT", 12) => Some(SubrecordValue::EffectParameters {
+        ("SPEL" | "ALCH", "EFIT", 12) => Some(SubrecordValue::EffectParameters {
             magnitude: finite_f32_at(bytes, 0)?,
             area: read_u32(bytes, 4),
             duration: read_u32(bytes, 8),
@@ -812,6 +902,119 @@ pub fn decode_with_localization(
                 })
                 .collect(),
         }),
+        ("RELA", "DATA", 16) => Some(SubrecordValue::RelationshipData {
+            parent: hex_u32(read_u32(bytes, 0)),
+            child: hex_u32(read_u32(bytes, 4)),
+            rank: read_u16(bytes, 8),
+            unknown: bytes[10],
+            flags: bytes[11],
+            association_type: hex_u32(read_u32(bytes, 12)),
+        }),
+        ("SNDR", "BNAM", 6) => Some(SubrecordValue::SoundDescriptorValues {
+            frequency_shift_percent: bytes[0] as i8,
+            frequency_variance_percent: bytes[1] as i8,
+            priority: bytes[2],
+            db_variance: bytes[3],
+            static_attenuation_db: read_u16(bytes, 4) as f32 / 100.0,
+        }),
+        ("SNDR", "LNAM", 4) => Some(SubrecordValue::SoundLoopValues {
+            unknown_1: bytes[0],
+            looping: bytes[1],
+            unknown_2: bytes[2],
+            rumble_send_value: bytes[3],
+        }),
+        ("ARMA", "DNAM", 12) => Some(SubrecordValue::ArmorAddonData {
+            male_priority: bytes[0],
+            female_priority: bytes[1],
+            male_weight_slider: bytes[2],
+            female_weight_slider: bytes[3],
+            unknown_1: hex_bytes(&bytes[4..6]),
+            detection_sound_value: bytes[6],
+            unknown_2: bytes[7],
+            weapon_adjust: finite_f32_at(bytes, 8)?,
+        }),
+        ("ALCH", "ENIT", 20) => Some(SubrecordValue::IngestibleEffectData {
+            value: read_i32(bytes, 0),
+            flags: read_u32(bytes, 4),
+            addiction: hex_u32(read_u32(bytes, 8)),
+            addiction_chance: finite_f32_at(bytes, 12)?,
+            consume_sound: hex_u32(read_u32(bytes, 16)),
+        }),
+        ("DIAL", "DATA", 4) => Some(SubrecordValue::DialogueData {
+            do_all_before_repeating: bytes[0] != 0,
+            category: bytes[1],
+            subtype: read_u16(bytes, 2),
+        }),
+        ("PACK", "PKDT", 12) => Some(SubrecordValue::PackageData {
+            general_flags: read_u32(bytes, 0),
+            package_type: bytes[4],
+            interrupt_override: bytes[5],
+            preferred_speed: bytes[6],
+            unknown_1: bytes[7],
+            interrupt_flags: read_u16(bytes, 8),
+            unknown_2: hex_bytes(&bytes[10..12]),
+        }),
+        ("PACK", "PSDT", 12) => Some(SubrecordValue::PackageSchedule {
+            month: bytes[0] as i8,
+            day_of_week: bytes[1] as i8,
+            date: bytes[2] as i8,
+            hour: bytes[3] as i8,
+            minute: bytes[4] as i8,
+            unused: hex_bytes(&bytes[5..8]),
+            duration_minutes: read_u32(bytes, 8),
+        }),
+        ("PACK", "PKCU", 12) => Some(SubrecordValue::PackageCounter {
+            data_input_count: read_u32(bytes, 0),
+            package_template: hex_u32(read_u32(bytes, 4)),
+            version_counter: read_u32(bytes, 8),
+        }),
+        ("PACK", "PDTO", 8) => Some(SubrecordValue::PackageTopicData {
+            topic_type: read_u32(bytes, 0),
+            data: hex_u32(read_u32(bytes, 4)),
+        }),
+        ("PACK", "PLDT", 12) => Some(SubrecordValue::Location {
+            location_type: read_i32(bytes, 0),
+            location_value: hex_u32(read_u32(bytes, 4)),
+            radius: read_i32(bytes, 8),
+        }),
+        ("PACK", "UNAM", 1) => Some(SubrecordValue::I8 {
+            value: bytes[0] as i8,
+        }),
+        ("PACK", "CNAM" | "XNAM", 1) => Some(SubrecordValue::U8 { value: bytes[0] }),
+        ("ARMA", "MO2T" | "MO3T" | "MO4T" | "MO5T", len) | ("ALCH", "MODT", len)
+            if len >= 12 && read_u32(bytes, 0) == 2 =>
+        {
+            let texture_count = read_u32(bytes, 4) as usize;
+            let addon_count = read_u32(bytes, 8) as usize;
+            let expected = 12usize
+                .checked_add(texture_count.checked_mul(12)?)?
+                .checked_add(addon_count.checked_mul(4)?)?;
+            if expected != len {
+                return None;
+            }
+            let texture_end = 12 + texture_count * 12;
+            let textures = bytes[12..texture_end]
+                .chunks_exact(12)
+                .map(|entry| ModelTextureHash {
+                    file_hash: hex_u32(read_u32(entry, 0)),
+                    extension: entry[4..8]
+                        .iter()
+                        .copied()
+                        .take_while(|byte| *byte != 0)
+                        .map(char::from)
+                        .collect(),
+                    folder_hash: hex_u32(read_u32(entry, 8)),
+                })
+                .collect();
+            let addon_nodes = bytes[texture_end..]
+                .chunks_exact(4)
+                .map(|entry| read_u32(entry, 0))
+                .collect();
+            Some(SubrecordValue::ModelInformation {
+                textures,
+                addon_nodes,
+            })
+        }
         ("RACE", "PHWT", 64)
             if bytes
                 .chunks_exact(4)
@@ -890,6 +1093,7 @@ pub fn decode_with_localization(
             })
         }
         ("GLOB", "FLTV", 4) => finite_f32(bytes),
+        ("GLOB", "FNAM", 1) => Some(SubrecordValue::U8 { value: bytes[0] }),
         ("FLST", "LNAM", 4) => Some(form_id(bytes)),
         ("KYWD" | "LCRT" | "AACT", "CNAM", 4) => Some(SubrecordValue::ColorRgba {
             red: bytes[0],
@@ -1002,6 +1206,9 @@ fn finite_f32_at(bytes: &[u8], offset: usize) -> Option<f32> {
 
 pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<Vec<u8>> {
     match value {
+        SubrecordValue::RawBytes { base64 } => BASE64
+            .decode(base64)
+            .with_context(|| format!("invalid raw_bytes base64 in {record}.{signature}")),
         SubrecordValue::Zstring { text } => {
             ensure!(
                 signature == "EDID"
@@ -1050,7 +1257,7 @@ pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<V
             Ok(out)
         }
         SubrecordValue::InventoryItem { item, count }
-            if (record, signature) == ("NPC_", "CNTO") =>
+            if matches!(record, "NPC_" | "COBJ") && signature == "CNTO" =>
         {
             let mut out = parse_hex_u32(item)?.to_le_bytes().to_vec();
             out.extend_from_slice(&count.to_le_bytes());
@@ -1070,7 +1277,7 @@ pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<V
             slots,
             slots_unknown_bits,
             armor_type,
-        } if matches!(record, "ARMO" | "RACE") && signature == "BOD2" => {
+        } if matches!(record, "ARMO" | "ARMA" | "RACE") && signature == "BOD2" => {
             let bits =
                 encode_named_flags(slots, slots_unknown_bits, BIPED_SLOT_NAMES, "BOD2 slots")?;
             let mut out = bits.to_le_bytes().to_vec();
@@ -1125,6 +1332,15 @@ pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<V
             if matches!((record, signature), ("LVLN" | "LVLI", "LVLD" | "LLCT")) =>
         {
             Ok(vec![*value])
+        }
+        SubrecordValue::U8 { value } if (record, signature) == ("GLOB", "FNAM") => Ok(vec![*value]),
+        SubrecordValue::U8 { value }
+            if matches!((record, signature), ("PACK", "CNAM" | "XNAM")) =>
+        {
+            Ok(vec![*value])
+        }
+        SubrecordValue::I8 { value } if (record, signature) == ("PACK", "UNAM") => {
+            Ok(vec![*value as u8])
         }
         SubrecordValue::Flags8 { set, unknown_bits }
             if matches!((record, signature), ("LVLN" | "LVLI", "LVLF")) =>
@@ -1268,7 +1484,7 @@ pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<V
             location_type,
             location_value,
             radius,
-        } if (record, signature) == ("FACT", "PLVD") => {
+        } if matches!((record, signature), ("FACT", "PLVD") | ("PACK", "PLDT")) => {
             let mut out = Vec::with_capacity(12);
             out.extend_from_slice(&location_type.to_le_bytes());
             out.extend_from_slice(&parse_hex_u32(location_value)?.to_le_bytes());
@@ -1448,8 +1664,11 @@ pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<V
             magnitude,
             area,
             duration,
-        } if (record, signature) == ("SPEL", "EFIT") => {
-            ensure!(magnitude.is_finite(), "SPEL.EFIT magnitude must be finite");
+        } if matches!(record, "SPEL" | "ALCH") && signature == "EFIT" => {
+            ensure!(
+                magnitude.is_finite(),
+                "{record}.EFIT magnitude must be finite"
+            );
             let mut out = magnitude.to_le_bytes().to_vec();
             out.extend_from_slice(&area.to_le_bytes());
             out.extend_from_slice(&duration.to_le_bytes());
@@ -1798,6 +2017,200 @@ pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<V
             out.extend_from_slice(&(template_bits as u16).to_le_bytes());
             out.extend_from_slice(&health_offset.to_le_bytes());
             out.extend_from_slice(&bleedout_override.to_le_bytes());
+            Ok(out)
+        }
+        SubrecordValue::RelationshipData {
+            parent,
+            child,
+            rank,
+            unknown,
+            flags,
+            association_type,
+        } if (record, signature) == ("RELA", "DATA") => {
+            let mut out = parse_hex_u32(parent)?.to_le_bytes().to_vec();
+            out.extend_from_slice(&parse_hex_u32(child)?.to_le_bytes());
+            out.extend_from_slice(&rank.to_le_bytes());
+            out.push(*unknown);
+            out.push(*flags);
+            out.extend_from_slice(&parse_hex_u32(association_type)?.to_le_bytes());
+            Ok(out)
+        }
+        SubrecordValue::SoundDescriptorValues {
+            frequency_shift_percent,
+            frequency_variance_percent,
+            priority,
+            db_variance,
+            static_attenuation_db,
+        } if (record, signature) == ("SNDR", "BNAM") => {
+            ensure!(
+                static_attenuation_db.is_finite(),
+                "SNDR.BNAM attenuation must be finite"
+            );
+            let scaled = (*static_attenuation_db * 100.0).round();
+            ensure!(
+                (0.0..=u16::MAX as f32).contains(&scaled),
+                "SNDR.BNAM attenuation is out of range"
+            );
+            let mut out = vec![
+                *frequency_shift_percent as u8,
+                *frequency_variance_percent as u8,
+                *priority,
+                *db_variance,
+            ];
+            out.extend_from_slice(&(scaled as u16).to_le_bytes());
+            Ok(out)
+        }
+        SubrecordValue::SoundLoopValues {
+            unknown_1,
+            looping,
+            unknown_2,
+            rumble_send_value,
+        } if (record, signature) == ("SNDR", "LNAM") => {
+            Ok(vec![*unknown_1, *looping, *unknown_2, *rumble_send_value])
+        }
+        SubrecordValue::ArmorAddonData {
+            male_priority,
+            female_priority,
+            male_weight_slider,
+            female_weight_slider,
+            unknown_1,
+            detection_sound_value,
+            unknown_2,
+            weapon_adjust,
+        } if (record, signature) == ("ARMA", "DNAM") => {
+            ensure!(
+                weapon_adjust.is_finite(),
+                "ARMA.DNAM weapon_adjust must be finite"
+            );
+            let mut out = vec![
+                *male_priority,
+                *female_priority,
+                *male_weight_slider,
+                *female_weight_slider,
+            ];
+            out.extend_from_slice(&parse_hex_bytes(unknown_1, 2)?);
+            out.extend_from_slice(&[*detection_sound_value, *unknown_2]);
+            out.extend_from_slice(&weapon_adjust.to_le_bytes());
+            Ok(out)
+        }
+        SubrecordValue::IngestibleEffectData {
+            value,
+            flags,
+            addiction,
+            addiction_chance,
+            consume_sound,
+        } if (record, signature) == ("ALCH", "ENIT") => {
+            ensure!(
+                addiction_chance.is_finite(),
+                "ALCH.ENIT addiction_chance must be finite"
+            );
+            let mut out = value.to_le_bytes().to_vec();
+            out.extend_from_slice(&flags.to_le_bytes());
+            out.extend_from_slice(&parse_hex_u32(addiction)?.to_le_bytes());
+            out.extend_from_slice(&addiction_chance.to_le_bytes());
+            out.extend_from_slice(&parse_hex_u32(consume_sound)?.to_le_bytes());
+            Ok(out)
+        }
+        SubrecordValue::DialogueData {
+            do_all_before_repeating,
+            category,
+            subtype,
+        } if (record, signature) == ("DIAL", "DATA") => {
+            let mut out = vec![u8::from(*do_all_before_repeating), *category];
+            out.extend_from_slice(&subtype.to_le_bytes());
+            Ok(out)
+        }
+        SubrecordValue::PackageData {
+            general_flags,
+            package_type,
+            interrupt_override,
+            preferred_speed,
+            unknown_1,
+            interrupt_flags,
+            unknown_2,
+        } if (record, signature) == ("PACK", "PKDT") => {
+            let mut out = general_flags.to_le_bytes().to_vec();
+            out.extend_from_slice(&[
+                *package_type,
+                *interrupt_override,
+                *preferred_speed,
+                *unknown_1,
+            ]);
+            out.extend_from_slice(&interrupt_flags.to_le_bytes());
+            out.extend_from_slice(&parse_hex_bytes(unknown_2, 2)?);
+            Ok(out)
+        }
+        SubrecordValue::PackageSchedule {
+            month,
+            day_of_week,
+            date,
+            hour,
+            minute,
+            unused,
+            duration_minutes,
+        } if (record, signature) == ("PACK", "PSDT") => {
+            let mut out = vec![
+                *month as u8,
+                *day_of_week as u8,
+                *date as u8,
+                *hour as u8,
+                *minute as u8,
+            ];
+            out.extend_from_slice(&parse_hex_bytes(unused, 3)?);
+            out.extend_from_slice(&duration_minutes.to_le_bytes());
+            Ok(out)
+        }
+        SubrecordValue::PackageCounter {
+            data_input_count,
+            package_template,
+            version_counter,
+        } if (record, signature) == ("PACK", "PKCU") => {
+            let mut out = data_input_count.to_le_bytes().to_vec();
+            out.extend_from_slice(&parse_hex_u32(package_template)?.to_le_bytes());
+            out.extend_from_slice(&version_counter.to_le_bytes());
+            Ok(out)
+        }
+        SubrecordValue::PackageTopicData { topic_type, data }
+            if (record, signature) == ("PACK", "PDTO") =>
+        {
+            let mut out = topic_type.to_le_bytes().to_vec();
+            out.extend_from_slice(&parse_hex_u32(data)?.to_le_bytes());
+            Ok(out)
+        }
+        SubrecordValue::ModelInformation {
+            textures,
+            addon_nodes,
+        } if matches!(
+            (record, signature),
+            ("ARMA", "MO2T" | "MO3T" | "MO4T" | "MO5T") | ("ALCH", "MODT")
+        ) =>
+        {
+            let mut out = Vec::with_capacity(12 + textures.len() * 12 + addon_nodes.len() * 4);
+            out.extend_from_slice(&2u32.to_le_bytes());
+            out.extend_from_slice(
+                &u32::try_from(textures.len())
+                    .context("too many model textures")?
+                    .to_le_bytes(),
+            );
+            out.extend_from_slice(
+                &u32::try_from(addon_nodes.len())
+                    .context("too many model addon nodes")?
+                    .to_le_bytes(),
+            );
+            for texture in textures {
+                out.extend_from_slice(&parse_hex_u32(&texture.file_hash)?.to_le_bytes());
+                let extension = plugin_bytes(&texture.extension, record, signature)?;
+                ensure!(
+                    extension.len() <= 4,
+                    "{record}.{signature} extension exceeds four bytes"
+                );
+                out.extend_from_slice(&extension);
+                out.resize(out.len() + (4 - extension.len()), 0);
+                out.extend_from_slice(&parse_hex_u32(&texture.folder_hash)?.to_le_bytes());
+            }
+            for addon_node in addon_nodes {
+                out.extend_from_slice(&addon_node.to_le_bytes());
+            }
             Ok(out)
         }
         _ => bail!("value type does not match the supported codec for {record}.{signature}"),

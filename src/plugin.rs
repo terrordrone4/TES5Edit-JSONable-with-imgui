@@ -27,6 +27,7 @@ pub use json_pack::{
     JsonInputInfo, JsonPackWriteResult, inspect_json_input, read_json_input, write_json_pack,
 };
 pub use read::parse_file;
+pub use read::{ParseOptions, parse_file_with_options};
 pub use value_codec::SubrecordValue;
 pub use write::write_file;
 
@@ -118,20 +119,27 @@ pub struct Group {
     pub elements: Vec<Element>,
 }
 
-pub(crate) fn parse_file_impl(path: impl AsRef<Path>) -> Result<Plugin> {
+pub(crate) fn parse_file_impl(path: impl AsRef<Path>, options: ParseOptions) -> Result<Plugin> {
     let path = path.as_ref();
     let bytes = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
     let localized = bytes.len() >= 12 && le_u32(&bytes[8..12]) & 0x80 != 0;
     let mut blobs = BTreeMap::new();
     let mut next_blob = 1;
-    let elements = parse_elements(&bytes, "plugin", localized, &mut blobs, &mut next_blob)?;
+    let elements = parse_elements(
+        &bytes,
+        "plugin",
+        localized,
+        options.preserve_original_compression,
+        &mut blobs,
+        &mut next_blob,
+    )?;
     ensure!(!elements.is_empty(), "plugin is empty");
     match &elements[0] {
         Element::Record(r) if r.signature == "TES4" => {}
         _ => bail!("a Skyrim plugin must begin with a TES4 record"),
     }
     Ok(Plugin {
-        format: "tes5edit-rust-json/v2".into(),
+        format: "tes5edit-rust-json/v3".into(),
         source_file: path.file_name().map(|s| s.to_string_lossy().into_owned()),
         elements,
         blobs,
@@ -142,7 +150,7 @@ pub(crate) fn write_file_impl(plugin: &Plugin, path: impl AsRef<Path>) -> Result
     ensure!(
         matches!(
             plugin.format.as_str(),
-            "tes5edit-rust-json/v1" | "tes5edit-rust-json/v2"
+            "tes5edit-rust-json/v2" | "tes5edit-rust-json/v3"
         ),
         "unsupported JSON format {}",
         plugin.format
@@ -160,6 +168,7 @@ fn parse_elements(
     mut input: &[u8],
     scope: &str,
     localized: bool,
+    preserve_original_compression: bool,
     blobs: &mut BTreeMap<String, String>,
     next_blob: &mut u64,
 ) -> Result<Vec<Element>> {
@@ -179,7 +188,14 @@ fn parse_elements(
             );
             let label = le_u32(&input[8..12]);
             let group_type = i32::from_le_bytes(input[12..16].try_into().unwrap());
-            let children = parse_elements(&input[24..size], "GRUP", localized, blobs, next_blob)?;
+            let children = parse_elements(
+                &input[24..size],
+                "GRUP",
+                localized,
+                preserve_original_compression,
+                blobs,
+                next_blob,
+            )?;
             result.push(Element::Group(Group {
                 label,
                 label_signature: (group_type == 0).then(|| display_signature(label.to_le_bytes())),
@@ -210,14 +226,14 @@ fn parse_elements(
                 flags,
                 flags_value: (sig == "TES4").then(|| record_flags::decode(flags)),
                 compressed,
-                original_compressed_ref: compressed
+                original_compressed_ref: (compressed && preserve_original_compression)
                     .then(|| insert_blob(blobs, next_blob, &input[24..total])),
                 original_compressed_base64: None,
                 form_id: le_u32(&input[12..16]),
                 revision: le_u32(&input[16..20]),
                 version: le_u16(&input[20..22]),
                 unknown: le_u16(&input[22..24]),
-                subrecords: parse_subrecords(&payload, &sig, localized, blobs, next_blob)?,
+                subrecords: parse_subrecords(&payload, &sig, localized)?,
             }));
             input = &input[total..];
         }
@@ -225,13 +241,7 @@ fn parse_elements(
     Ok(result)
 }
 
-fn parse_subrecords(
-    mut data: &[u8],
-    record: &str,
-    localized: bool,
-    blobs: &mut BTreeMap<String, String>,
-    next_blob: &mut u64,
-) -> Result<Vec<Subrecord>> {
+fn parse_subrecords(mut data: &[u8], record: &str, localized: bool) -> Result<Vec<Subrecord>> {
     let mut out = Vec::new();
     let mut extended = None;
     let total_len = data.len();
@@ -265,11 +275,15 @@ fn parse_subrecords(
             extended = Some(le_u32(bytes) as usize);
             continue;
         }
+        let value = value_codec::decode_with_localization(record, &sig, bytes, localized)
+            .unwrap_or_else(|| SubrecordValue::RawBytes {
+                base64: BASE64.encode(bytes),
+            });
         out.push(Subrecord {
-            value: value_codec::decode_with_localization(record, &sig, bytes, localized),
+            value: Some(value),
             display_name: value_codec::display_name(record, &sig).map(str::to_owned),
             signature: sig,
-            data_ref: Some(insert_blob(blobs, next_blob, bytes)),
+            data_ref: None,
             data_base64: None,
             text_preview: text_preview(bytes),
         });
@@ -554,7 +568,8 @@ mod tests {
             write_elements(&p.elements, &p.blobs, &mut bytes).unwrap();
             let mut blobs = BTreeMap::new();
             let mut next_blob = 1;
-            let parsed = parse_elements(&bytes, "test", false, &mut blobs, &mut next_blob).unwrap();
+            let parsed =
+                parse_elements(&bytes, "test", false, false, &mut blobs, &mut next_blob).unwrap();
             let mut again = vec![];
             write_elements(&parsed, &blobs, &mut again).unwrap();
             let mut reparsed_blobs = BTreeMap::new();
@@ -563,6 +578,7 @@ mod tests {
                 parse_elements(
                     &again,
                     "again",
+                    false,
                     false,
                     &mut reparsed_blobs,
                     &mut reparsed_next
@@ -663,8 +679,13 @@ mod tests {
 
         for (fixture_index, path) in files.into_iter().enumerate() {
             let original = fs::read(&path).unwrap();
-            let plugin = parse_file(&path)
-                .unwrap_or_else(|e| panic!("failed to parse {}: {e:#}", path.display()));
+            let plugin = parse_file_with_options(
+                &path,
+                ParseOptions {
+                    preserve_original_compression: true,
+                },
+            )
+            .unwrap_or_else(|e| panic!("failed to parse {}: {e:#}", path.display()));
             let json = serde_json::to_vec(&plugin).unwrap();
             let from_json: Plugin = serde_json::from_slice(&json).unwrap();
             let mut rebuilt = Vec::new();
@@ -689,6 +710,7 @@ mod tests {
                 &rebuilt,
                 "rebuilt fixture",
                 false,
+                false,
                 &mut rebuilt_blobs,
                 &mut rebuilt_next,
             )
@@ -705,10 +727,13 @@ mod tests {
                 .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
                 .count();
             assert_eq!(pack_result.json_file_count, actual_json_count);
-            assert!(pack_dir.join("__blobs__.json").is_file());
+            assert_eq!(
+                pack_dir.join("__blobs__.json").is_file(),
+                !plugin.blobs.is_empty()
+            );
             let tes4_fragment = fs::read_to_string(pack_dir.join("TES4.json")).unwrap();
             assert!(!tes4_fragment.contains("\"blobs\""));
-            assert!(tes4_fragment.contains("\"data_ref\""));
+            assert!(!tes4_fragment.contains("\"data_ref\""));
             let pack_info = inspect_json_input(&pack_dir)
                 .unwrap_or_else(|e| panic!("failed to inspect pack for {}: {e:#}", path.display()));
             assert!(pack_info.is_pack);
@@ -728,5 +753,43 @@ mod tests {
                 path.display()
             );
         }
+    }
+
+    #[test]
+    fn fertility_clean_export_has_values_without_blobs() {
+        fn assert_clean(elements: &[Element]) {
+            for element in elements {
+                match element {
+                    Element::Record(record) => {
+                        assert!(record.original_compressed_ref.is_none());
+                        for subrecord in &record.subrecords {
+                            assert!(subrecord.value.is_some());
+                            assert!(subrecord.data_ref.is_none());
+                        }
+                    }
+                    Element::Group(group) => assert_clean(&group.elements),
+                }
+            }
+        }
+
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/Fertility Mode.esm");
+        let plugin = parse_file(&path).unwrap();
+        assert_eq!(plugin.format, "tes5edit-rust-json/v3");
+        assert!(plugin.blobs.is_empty());
+        assert_clean(&plugin.elements);
+
+        let mut rebuilt = Vec::new();
+        write_elements(&plugin.elements, &plugin.blobs, &mut rebuilt).unwrap();
+        let mut blobs = BTreeMap::new();
+        let mut next_blob = 1;
+        parse_elements(
+            &rebuilt,
+            "clean Fertility fixture",
+            false,
+            false,
+            &mut blobs,
+            &mut next_blob,
+        )
+        .unwrap();
     }
 }
