@@ -25,11 +25,68 @@ mod write;
 
 pub use json_pack::{
     JsonInputInfo, JsonPackWriteResult, inspect_json_input, read_json_input, write_json_pack,
+    write_json_pack_with_options,
 };
 pub use read::parse_file;
 pub use read::{ParseOptions, parse_file_with_options};
 pub use value_codec::SubrecordValue;
 pub use write::write_file;
+
+pub fn to_json_pretty(plugin: &Plugin, trim_default_values: bool) -> Result<Vec<u8>> {
+    if !trim_default_values {
+        return Ok(serde_json::to_vec_pretty(plugin)?);
+    }
+    let mut json = serde_json::to_value(plugin)?;
+    trim_json_defaults(&mut json);
+    Ok(serde_json::to_vec_pretty(&json)?)
+}
+
+fn trim_json_defaults(json: &mut serde_json::Value) {
+    match json {
+        serde_json::Value::Array(values) => {
+            for value in values {
+                trim_json_defaults(value);
+            }
+        }
+        serde_json::Value::Object(object) => {
+            if object
+                .get("value")
+                .and_then(serde_json::Value::as_object)
+                .and_then(|value| value.get("type"))
+                .and_then(serde_json::Value::as_str)
+                == Some("empty")
+            {
+                object.remove("value");
+            }
+            for value in object.values_mut() {
+                trim_json_defaults(value);
+            }
+            if object.contains_key("type") {
+                object.retain(|key, value| key == "type" || !is_json_default(value));
+            }
+        }
+        _ => {}
+    }
+}
+
+fn is_json_default(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Null => true,
+        serde_json::Value::Bool(value) => !value,
+        serde_json::Value::Number(value) => {
+            value.as_i64() == Some(0) || value.as_u64() == Some(0) || value.as_f64() == Some(0.0)
+        }
+        serde_json::Value::String(value) => {
+            value.is_empty()
+                || value
+                    .strip_prefix("0x")
+                    .or_else(|| value.strip_prefix("0X"))
+                    .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b == b'0'))
+        }
+        serde_json::Value::Array(value) => value.is_empty(),
+        serde_json::Value::Object(_) => false,
+    }
+}
 
 const RECORD_HEADER_SIZE: usize = 24;
 const COMPRESSED: u32 = 0x0004_0000;
@@ -346,6 +403,8 @@ fn write_record(r: &Record, blobs: &BTreeMap<String, String>, out: &mut Vec<u8>)
         let ssig = signature_bytes(&s.signature)?;
         let bytes = if let Some(value) = &s.value {
             value_codec::encode(&r.signature, &s.signature, value)?
+        } else if s.data_ref.is_none() && s.data_base64.is_none() {
+            value_codec::encode(&r.signature, &s.signature, &SubrecordValue::Empty)?
         } else {
             let encoded = resolve_blob(
                 blobs,
@@ -791,5 +850,27 @@ mod tests {
             &mut next_blob,
         )
         .unwrap();
+    }
+
+    #[test]
+    fn trimmed_fertility_json_imports_and_round_trips() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/Fertility Mode.esm");
+        let original = fs::read(&path).unwrap();
+        let plugin = parse_file_with_options(
+            &path,
+            ParseOptions {
+                preserve_original_compression: true,
+            },
+        )
+        .unwrap();
+        let json = to_json_pretty(&plugin, true).unwrap();
+        let text = String::from_utf8(json.clone()).unwrap();
+        assert!(!text.contains("\"type\": \"empty\""));
+        assert!(text.len() < serde_json::to_vec_pretty(&plugin).unwrap().len());
+
+        let trimmed: Plugin = serde_json::from_slice(&json).unwrap();
+        let mut rebuilt = Vec::new();
+        write_elements(&trimmed.elements, &trimmed.blobs, &mut rebuilt).unwrap();
+        assert_eq!(rebuilt, original);
     }
 }

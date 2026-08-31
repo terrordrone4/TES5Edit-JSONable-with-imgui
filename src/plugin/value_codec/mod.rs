@@ -49,376 +49,640 @@ pub enum SubrecordValue {
     /// Authoritative bytes for a payload whose semantic schema is not yet
     /// implemented. This keeps clean JSON self-contained without a blob table.
     RawBytes {
+        #[serde(default)]
         base64: String,
     },
     Zstring {
+        #[serde(default)]
         text: String,
     },
     FixedString {
+        #[serde(default)]
         text: String,
     },
     LocalizedStringId {
+        #[serde(default)]
         id: String,
     },
     FormId {
+        #[serde(default)]
         id: String,
     },
     FormIdArray {
+        #[serde(default)]
         ids: Vec<String>,
     },
     InventoryItem {
+        #[serde(default)]
         item: String,
+        #[serde(default)]
         count: i32,
     },
     FactionMembership {
+        #[serde(default)]
         faction: String,
+        #[serde(default)]
         rank: i8,
+        #[serde(default)]
         unused: String,
     },
     BipedBodyTemplate {
+        #[serde(default)]
         slots: Vec<String>,
+        #[serde(default)]
         slots_unknown_bits: String,
+        #[serde(default)]
         armor_type: u32,
     },
     AttackData {
+        #[serde(default)]
         damage_multiplier: f32,
+        #[serde(default)]
         attack_chance: f32,
+        #[serde(default)]
         attack_spell: String,
+        #[serde(default)]
         flags: Vec<String>,
+        #[serde(default)]
         flags_unknown_bits: String,
+        #[serde(default)]
         attack_angle: f32,
+        #[serde(default)]
         strike_angle: f32,
+        #[serde(default)]
         stagger: f32,
+        #[serde(default)]
         attack_type: String,
+        #[serde(default)]
         knockdown: f32,
+        #[serde(default)]
         recovery_time: f32,
+        #[serde(default)]
         stamina_multiplier: f32,
     },
     U8 {
+        #[serde(default)]
         value: u8,
     },
     I8 {
+        #[serde(default)]
         value: i8,
     },
     U16 {
+        #[serde(default)]
         value: u16,
     },
     I16 {
+        #[serde(default)]
         value: i16,
     },
     Empty,
     Flags8 {
+        #[serde(default)]
         set: Vec<String>,
+        #[serde(default)]
         unknown_bits: String,
     },
     U32 {
+        #[serde(default)]
         value: u32,
     },
     U64 {
+        #[serde(default)]
         value: u64,
     },
     I32 {
+        #[serde(default)]
         value: i32,
     },
     F32 {
+        #[serde(default)]
         value: f32,
     },
     ColorRgba {
+        #[serde(default)]
         red: u8,
+        #[serde(default)]
         green: u8,
+        #[serde(default)]
         blue: u8,
+        #[serde(default)]
         alpha: u8,
     },
     ColorRgbFloat {
+        #[serde(default)]
         red: f32,
+        #[serde(default)]
         green: f32,
+        #[serde(default)]
         blue: f32,
     },
     Flags32 {
+        #[serde(default)]
         set: Vec<String>,
+        #[serde(default)]
         unknown_bits: String,
     },
     FactionRelation {
+        #[serde(default)]
         faction: String,
+        #[serde(default)]
         modifier: i32,
+        #[serde(default)]
         group_combat_reaction: u32,
     },
     CrimeValues {
+        #[serde(default)]
         arrest: bool,
+        #[serde(default)]
         attack_on_sight: bool,
+        #[serde(default)]
         murder: u16,
+        #[serde(default)]
         assault: u16,
+        #[serde(default)]
         trespass: u16,
+        #[serde(default)]
         pickpocket: u16,
+        #[serde(default)]
         unknown: u16,
+        #[serde(default)]
         steal_multiplier: f32,
+        #[serde(default)]
         escape: u16,
+        #[serde(default)]
         werewolf: u16,
     },
     VendorValues {
+        #[serde(default)]
         start_hour: u16,
+        #[serde(default)]
         end_hour: u16,
+        #[serde(default)]
         radius: u16,
+        #[serde(default)]
         unknown_1: String,
+        #[serde(default)]
         only_buys_stolen_items: bool,
+        #[serde(default)]
         not_sell_buy: bool,
+        #[serde(default)]
         unknown_2: String,
     },
     Location {
+        #[serde(default)]
         location_type: i32,
+        #[serde(default)]
         location_value: String,
+        #[serde(default)]
         radius: i32,
     },
     ObjectBounds {
+        #[serde(default)]
         min_x: i16,
+        #[serde(default)]
         min_y: i16,
+        #[serde(default)]
         min_z: i16,
+        #[serde(default)]
         max_x: i16,
+        #[serde(default)]
         max_y: i16,
+        #[serde(default)]
         max_z: i16,
     },
     PluginHeader {
+        #[serde(default)]
         version: f32,
+        #[serde(default)]
         number_of_records: u32,
+        #[serde(default)]
         next_object_id: String,
     },
     ItemData {
+        #[serde(default)]
         value: i32,
+        #[serde(default)]
         weight: f32,
     },
     ArmorRating {
+        #[serde(default)]
         value: f32,
     },
     NpcAiData {
+        #[serde(default)]
         aggression: u8,
+        #[serde(default)]
         confidence: u8,
+        #[serde(default)]
         energy_level: u8,
+        #[serde(default)]
         morality: u8,
+        #[serde(default)]
         mood: u8,
+        #[serde(default)]
         assistance: u8,
+        #[serde(default)]
         aggro_radius_behavior: bool,
+        #[serde(default)]
         unused: u8,
+        #[serde(default)]
         warn: u32,
+        #[serde(default)]
         warn_attack: u32,
+        #[serde(default)]
         attack: u32,
     },
     NpcPlayerSkills {
+        #[serde(default)]
         skills: Vec<NpcSkill>,
+        #[serde(default)]
         health: u16,
+        #[serde(default)]
         magicka: u16,
+        #[serde(default)]
         stamina: u16,
+        #[serde(default)]
         unused: String,
+        #[serde(default)]
         far_away_model_distance: f32,
+        #[serde(default)]
         geared_up_weapons: u8,
+        #[serde(default)]
         trailing_unused: String,
     },
     LeveledListEntry {
+        #[serde(default)]
         level: u16,
+        #[serde(default)]
         reference: String,
+        #[serde(default)]
         count: u16,
     },
     LeveledExtraData {
+        #[serde(default)]
         owner: String,
+        #[serde(default)]
         global_or_required_rank_raw: String,
+        #[serde(default)]
         item_condition: f32,
     },
     SpellData {
+        #[serde(default)]
         base_cost: u32,
+        #[serde(default)]
         flags: Vec<String>,
+        #[serde(default)]
         flags_unknown_bits: String,
+        #[serde(default)]
         spell_type: u32,
+        #[serde(default)]
         charge_time: f32,
+        #[serde(default)]
         cast_type: u32,
+        #[serde(default)]
         delivery: u32,
+        #[serde(default)]
         cast_duration: f32,
+        #[serde(default)]
         range: f32,
+        #[serde(default)]
         half_cost_perk: String,
     },
     EffectParameters {
+        #[serde(default)]
         magnitude: f32,
+        #[serde(default)]
         area: u32,
+        #[serde(default)]
         duration: u32,
     },
     MagicEffectData {
+        #[serde(default)]
         flags: Vec<String>,
+        #[serde(default)]
         flags_unknown_bits: String,
+        #[serde(default)]
         base_cost: f32,
+        #[serde(default)]
         associated_item: String,
+        #[serde(default)]
         magic_skill: i32,
+        #[serde(default)]
         resist_value: i32,
+        #[serde(default)]
         counter_effect_count: u16,
+        #[serde(default)]
         casting_light: String,
+        #[serde(default)]
         taper_weight: f32,
+        #[serde(default)]
         hit_shader: String,
+        #[serde(default)]
         enchant_shader: String,
+        #[serde(default)]
         minimum_skill_level: u32,
+        #[serde(default)]
         spellmaking_area: u32,
+        #[serde(default)]
         spellmaking_casting_time: f32,
+        #[serde(default)]
         taper_curve: f32,
+        #[serde(default)]
         taper_duration: f32,
+        #[serde(default)]
         second_actor_value_weight: f32,
+        #[serde(default)]
         archetype: u32,
+        #[serde(default)]
         primary_actor_value: i32,
+        #[serde(default)]
         projectile: String,
+        #[serde(default)]
         explosion: String,
+        #[serde(default)]
         casting_type: u32,
+        #[serde(default)]
         delivery: u32,
+        #[serde(default)]
         second_actor_value: i32,
+        #[serde(default)]
         casting_art: String,
+        #[serde(default)]
         hit_effect_art: String,
+        #[serde(default)]
         impact_data: String,
+        #[serde(default)]
         skill_usage_multiplier: f32,
+        #[serde(default)]
         dual_casting_art: String,
+        #[serde(default)]
         dual_casting_scale: f32,
+        #[serde(default)]
         enchant_art: String,
+        #[serde(default)]
         hit_visuals: String,
+        #[serde(default)]
         enchant_visuals: String,
+        #[serde(default)]
         equip_ability: String,
+        #[serde(default)]
         image_space_modifier: String,
+        #[serde(default)]
         perk_to_apply: String,
+        #[serde(default)]
         casting_sound_level: u32,
+        #[serde(default)]
         script_effect_ai_score: f32,
+        #[serde(default)]
         script_effect_ai_delay_time: f32,
     },
     MagicEffectSounds {
+        #[serde(default)]
         sounds: Vec<MagicEffectSound>,
     },
     FloatArray {
+        #[serde(default)]
         values: Vec<f32>,
     },
     RaceData {
+        #[serde(default)]
         skill_boosts: Vec<RaceSkillBoost>,
+        #[serde(default)]
         unknown: String,
+        #[serde(default)]
         male_height: f32,
+        #[serde(default)]
         female_height: f32,
+        #[serde(default)]
         male_weight: f32,
+        #[serde(default)]
         female_weight: f32,
+        #[serde(default)]
         flags: Vec<String>,
+        #[serde(default)]
         flags_unknown_bits: String,
+        #[serde(default)]
         starting_health: f32,
+        #[serde(default)]
         starting_magicka: f32,
+        #[serde(default)]
         starting_stamina: f32,
+        #[serde(default)]
         base_carry_weight: f32,
+        #[serde(default)]
         base_mass: f32,
+        #[serde(default)]
         acceleration_rate: f32,
+        #[serde(default)]
         deceleration_rate: f32,
+        #[serde(default)]
         size: u32,
+        #[serde(default)]
         head_biped_object: i32,
+        #[serde(default)]
         hair_biped_object: i32,
+        #[serde(default)]
         injured_health_pct: f32,
+        #[serde(default)]
         shield_biped_object: i32,
+        #[serde(default)]
         health_regen: f32,
+        #[serde(default)]
         magicka_regen: f32,
+        #[serde(default)]
         stamina_regen: f32,
+        #[serde(default)]
         unarmed_damage: f32,
+        #[serde(default)]
         unarmed_reach: f32,
+        #[serde(default)]
         body_biped_object: i32,
+        #[serde(default)]
         aim_angle_tolerance: f32,
+        #[serde(default)]
         flight_radius: f32,
+        #[serde(default)]
         angular_acceleration_rate: f32,
+        #[serde(default)]
         angular_tolerance: f32,
+        #[serde(default)]
         flags_2: Vec<String>,
+        #[serde(default)]
         flags_2_unknown_bits: String,
+        #[serde(default)]
         mount_offset_x: f32,
+        #[serde(default)]
         mount_offset_y: f32,
+        #[serde(default)]
         mount_offset_z: f32,
+        #[serde(default)]
         dismount_offset_x: f32,
+        #[serde(default)]
         dismount_offset_y: f32,
+        #[serde(default)]
         dismount_offset_z: f32,
+        #[serde(default)]
         mount_camera_offset_x: f32,
+        #[serde(default)]
         mount_camera_offset_y: f32,
+        #[serde(default)]
         mount_camera_offset_z: f32,
     },
     NpcConfiguration {
+        #[serde(default)]
         flags: Vec<String>,
+        #[serde(default)]
         flags_unknown_bits: String,
+        #[serde(default)]
         magicka_offset: i16,
+        #[serde(default)]
         stamina_offset: i16,
         #[serde(skip_serializing_if = "Option::is_none", default)]
         level: Option<u16>,
         #[serde(skip_serializing_if = "Option::is_none", default)]
         level_multiplier: Option<f32>,
+        #[serde(default)]
         calc_min_level: u16,
+        #[serde(default)]
         calc_max_level: u16,
+        #[serde(default)]
         speed_multiplier: u16,
+        #[serde(default)]
         disposition_base_unused: i16,
+        #[serde(default)]
         template_flags: Vec<String>,
+        #[serde(default)]
         template_flags_unknown_bits: String,
+        #[serde(default)]
         health_offset: i16,
+        #[serde(default)]
         bleedout_override: u16,
     },
     RelationshipData {
+        #[serde(default)]
         parent: String,
+        #[serde(default)]
         child: String,
+        #[serde(default)]
         rank: u16,
+        #[serde(default)]
         unknown: u8,
+        #[serde(default)]
         flags: u8,
+        #[serde(default)]
         association_type: String,
     },
     SoundDescriptorValues {
+        #[serde(default)]
         frequency_shift_percent: i8,
+        #[serde(default)]
         frequency_variance_percent: i8,
+        #[serde(default)]
         priority: u8,
+        #[serde(default)]
         db_variance: u8,
+        #[serde(default)]
         static_attenuation_db: f32,
     },
     SoundLoopValues {
+        #[serde(default)]
         unknown_1: u8,
+        #[serde(default)]
         looping: u8,
+        #[serde(default)]
         unknown_2: u8,
+        #[serde(default)]
         rumble_send_value: u8,
     },
     ArmorAddonData {
+        #[serde(default)]
         male_priority: u8,
+        #[serde(default)]
         female_priority: u8,
+        #[serde(default)]
         male_weight_slider: u8,
+        #[serde(default)]
         female_weight_slider: u8,
+        #[serde(default)]
         unknown_1: String,
+        #[serde(default)]
         detection_sound_value: u8,
+        #[serde(default)]
         unknown_2: u8,
+        #[serde(default)]
         weapon_adjust: f32,
     },
     IngestibleEffectData {
+        #[serde(default)]
         value: i32,
+        #[serde(default)]
         flags: u32,
+        #[serde(default)]
         addiction: String,
+        #[serde(default)]
         addiction_chance: f32,
+        #[serde(default)]
         consume_sound: String,
     },
     DialogueData {
+        #[serde(default)]
         do_all_before_repeating: bool,
+        #[serde(default)]
         category: u8,
+        #[serde(default)]
         subtype: u16,
     },
     PackageData {
+        #[serde(default)]
         general_flags: u32,
+        #[serde(default)]
         package_type: u8,
+        #[serde(default)]
         interrupt_override: u8,
+        #[serde(default)]
         preferred_speed: u8,
+        #[serde(default)]
         unknown_1: u8,
+        #[serde(default)]
         interrupt_flags: u16,
+        #[serde(default)]
         unknown_2: String,
     },
     PackageSchedule {
+        #[serde(default)]
         month: i8,
+        #[serde(default)]
         day_of_week: i8,
+        #[serde(default)]
         date: i8,
+        #[serde(default)]
         hour: i8,
+        #[serde(default)]
         minute: i8,
+        #[serde(default)]
         unused: String,
+        #[serde(default)]
         duration_minutes: u32,
     },
     PackageCounter {
+        #[serde(default)]
         data_input_count: u32,
+        #[serde(default)]
         package_template: String,
+        #[serde(default)]
         version_counter: u32,
     },
     PackageTopicData {
+        #[serde(default)]
         topic_type: u32,
+        #[serde(default)]
         data: String,
     },
     ModelInformation {
+        #[serde(default)]
         textures: Vec<ModelTextureHash>,
+        #[serde(default)]
         addon_nodes: Vec<u32>,
     },
 }
@@ -1983,17 +2247,19 @@ pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<V
                 encode_named_flags(flags, flags_unknown_bits, NPC_FLAG_NAMES, "NPC_.ACBS flags")?;
             let uses_multiplier = flag_bits & 0x80 != 0;
             ensure!(
-                uses_multiplier == level_multiplier.is_some() && uses_multiplier != level.is_some(),
-                "NPC_.ACBS must contain level_multiplier exactly when pc_level_mult is set, otherwise level"
+                (uses_multiplier && level.is_none())
+                    || (!uses_multiplier && level_multiplier.is_none()),
+                "NPC_.ACBS level and pc_level_mult disagree"
             );
-            let raw_level = if let Some(multiplier) = level_multiplier {
+            let raw_level = if uses_multiplier {
+                let multiplier = level_multiplier.unwrap_or(0.0);
                 ensure!(
-                    multiplier.is_finite() && (0.0..=65.535).contains(multiplier),
+                    multiplier.is_finite() && (0.0..=65.535).contains(&multiplier),
                     "NPC_.ACBS level_multiplier is out of range"
                 );
                 (multiplier * 1000.0).round() as u16
             } else {
-                level.unwrap()
+                level.unwrap_or(0)
             };
             let template_bits = encode_named_flags(
                 template_flags,
@@ -2218,6 +2484,9 @@ pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<V
 }
 
 fn parse_hex_u32(text: &str) -> Result<u32> {
+    if text.is_empty() {
+        return Ok(0);
+    }
     let digits = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X"));
     match digits {
         Some(digits) => Ok(u32::from_str_radix(digits, 16)?),
@@ -2253,6 +2522,9 @@ fn hex_bytes(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02X}")).collect()
 }
 fn parse_hex_bytes(text: &str, expected: usize) -> Result<Vec<u8>> {
+    if text.is_empty() {
+        return Ok(vec![0; expected]);
+    }
     let text = text
         .strip_prefix("0x")
         .or_else(|| text.strip_prefix("0X"))

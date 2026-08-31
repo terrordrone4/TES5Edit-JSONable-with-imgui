@@ -7,7 +7,7 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
-use super::{Element, Plugin};
+use super::{Element, Plugin, to_json_pretty};
 
 const MANIFEST_NAME: &str = "pack-manifest.json";
 const BLOBS_NAME: &str = "__blobs__.json";
@@ -42,6 +42,14 @@ struct PackFragment {
 }
 
 pub fn write_json_pack(plugin: &Plugin, pack_dir: impl AsRef<Path>) -> Result<JsonPackWriteResult> {
+    write_json_pack_with_options(plugin, pack_dir, false)
+}
+
+pub fn write_json_pack_with_options(
+    plugin: &Plugin,
+    pack_dir: impl AsRef<Path>,
+    trim_default_values: bool,
+) -> Result<JsonPackWriteResult> {
     let pack_dir = pack_dir.as_ref();
     fs::create_dir_all(pack_dir)
         .with_context(|| format!("creating JSON pack {}", pack_dir.display()))?;
@@ -74,7 +82,7 @@ pub fn write_json_pack(plugin: &Plugin, pack_dir: impl AsRef<Path>) -> Result<Js
             elements,
             blobs: BTreeMap::new(),
         };
-        fs::write(&output, serde_json::to_vec_pretty(&fragment)?)
+        fs::write(&output, to_json_pretty(&fragment, trim_default_values)?)
             .with_context(|| format!("writing {}", output.display()))?;
         first_output.get_or_insert(output);
         fragments.push(PackFragment {

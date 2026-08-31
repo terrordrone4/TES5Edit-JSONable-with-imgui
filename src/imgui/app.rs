@@ -2,8 +2,8 @@ use std::{fs, path::PathBuf};
 
 use eframe::egui;
 use tes5edit_rust_json::{
-    ParseOptions, inspect_json_input, parse_file_with_options, read_json_input, write_file,
-    write_json_pack,
+    ParseOptions, inspect_json_input, parse_file_with_options, read_json_input, to_json_pretty,
+    write_file, write_json_pack_with_options,
 };
 
 use super::components::output_log::OutputLog;
@@ -13,6 +13,7 @@ pub struct App {
     output_dir: Option<PathBuf>,
     split_json_pack: bool,
     preserve_byte_identical: bool,
+    trim_default_values: bool,
     json_input: Option<PathBuf>,
     json_input_description: String,
     output_log: OutputLog,
@@ -25,6 +26,7 @@ impl Default for App {
             output_dir: None,
             split_json_pack: true,
             preserve_byte_identical: false,
+            trim_default_values: true,
             json_input: None,
             json_input_description: String::new(),
             output_log: OutputLog::default(),
@@ -63,6 +65,7 @@ impl eframe::App for App {
                 &mut self.preserve_byte_identical,
                 "Preserve original compressed bytes for byte-identical round trips",
             );
+            ui.checkbox(&mut self.trim_default_values, "Trim default values");
             if ui
                 .add_enabled(
                     !self.plugins.is_empty() && self.output_dir.is_some(),
@@ -130,7 +133,8 @@ impl App {
                 let name = format!("{}.json", input.file_name().unwrap().to_string_lossy());
                 if self.split_json_pack {
                     let pack_dir = output.join(format!("{name}-pack"));
-                    let written = write_json_pack(&plugin, pack_dir)?;
+                    let written =
+                        write_json_pack_with_options(&plugin, pack_dir, self.trim_default_values)?;
                     json_file_count += written.json_file_count;
                     first_output.get_or_insert(written.first_output);
                     if self.plugins.len() == 1 {
@@ -138,7 +142,10 @@ impl App {
                     }
                 } else {
                     let output_file = output.join(name);
-                    fs::write(&output_file, serde_json::to_vec_pretty(&plugin)?)?;
+                    fs::write(
+                        &output_file,
+                        to_json_pretty(&plugin, self.trim_default_values)?,
+                    )?;
                     first_output.get_or_insert(output_file);
                     json_file_count += 1;
                 }

@@ -59,6 +59,8 @@ Numeric record/group header fields whose value is zero are omitted from JSON and
 
 The GUI's default-off byte-identical checkbox controls preservation of original compressed streams. When enabled, compressed records retain an `original_compressed_ref`; unchanged records reuse those exact bytes. Clean exports omit that reference and the writer creates a fresh valid zlib stream from the authoritative values.
 
+The GUI enables split JSON packs and default-value trimming by default. Trimming omits zero numbers, false booleans, empty strings and lists, null FormIDs, zero-only hexadecimal values, and `value` objects whose type is `empty`. Import restores omitted typed members to their binary defaults.
+
 This remains deliberately conservative rather than pretending to be xEdit's entire schema engine. The TES4 localization flag is honored: ordinary strings become editable text and localized strings become explicit string-table IDs. Resolving those IDs to translated text still requires external `.STRINGS` files. VMAD, conditions, models' opaque hash data, and a few sequence-dependent arrays remain explicit inline `raw_bytes` values until dedicated codecs are implemented.
 
 ## Build and run
