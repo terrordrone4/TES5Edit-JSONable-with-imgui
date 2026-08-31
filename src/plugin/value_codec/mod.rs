@@ -44,7 +44,7 @@ pub struct ModelTextureHash {
 /// enum is intentionally small: adding a guessed decoder is worse than leaving
 /// an unknown field in its lossless blob.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum SubrecordValue {
     /// Authoritative bytes for a payload whose semantic schema is not yet
     /// implemented. This keeps clean JSON self-contained without a blob table.
@@ -903,6 +903,200 @@ const LVLI_FLAG_NAMES: &[(u32, &str)] = &[
 
 pub fn display_name(record: &str, signature: &str) -> Option<&'static str> {
     display_names::get(record, signature)
+}
+
+pub(crate) fn infer_json_value_type(
+    record: &str,
+    signature: &str,
+    localized: bool,
+    value: &serde_json::Map<String, serde_json::Value>,
+) -> Option<&'static str> {
+    if value.contains_key("base64") {
+        return Some("raw_bytes");
+    }
+    let mapped = match (record, signature) {
+        ("TES4", "HEDR") => Some("plugin_header"),
+        (_, "OBND") => Some("object_bounds"),
+        ("ARMO" | "ARMA" | "RACE", "BOD2") => Some("biped_body_template"),
+        ("NPC_" | "RACE", "ATKD") => Some("attack_data"),
+        ("NPC_" | "COBJ", "CNTO") => Some("inventory_item"),
+        ("NPC_", "SNAM") => Some("faction_membership"),
+        ("ARMO", "DATA") => Some("item_data"),
+        ("ARMO", "DNAM") => Some("armor_rating"),
+        ("NPC_", "AIDT") => Some("npc_ai_data"),
+        ("NPC_", "DNAM") => Some("npc_player_skills"),
+        ("NPC_", "QNAM") => Some("color_rgb_float"),
+        ("NPC_", "TINC") => Some("color_rgba"),
+        ("LVLN" | "LVLI", "LVLO") => Some("leveled_list_entry"),
+        ("LVLN" | "LVLI", "COED") => Some("leveled_extra_data"),
+        ("SPEL", "SPIT") => Some("spell_data"),
+        ("SPEL" | "ALCH", "EFIT") => Some("effect_parameters"),
+        ("MGEF", "DATA") => Some("magic_effect_data"),
+        ("MGEF", "SNDD") => Some("magic_effect_sounds"),
+        ("RACE", "PHWT") => Some("float_array"),
+        ("RACE", "DATA") => Some("race_data"),
+        ("KYWD" | "LCRT" | "AACT", "CNAM") => Some("color_rgba"),
+        ("FACT", "XNAM") => Some("faction_relation"),
+        ("FACT", "CRVA") => Some("crime_values"),
+        ("FACT", "VENV") => Some("vendor_values"),
+        ("FACT", "PLVD") | ("PACK", "PLDT") => Some("location"),
+        ("FACT", "DATA") => Some("flags32"),
+        ("LVLN" | "LVLI", "LVLF") => Some("flags8"),
+        ("NPC_", "ACBS") => Some("npc_configuration"),
+        ("RELA", "DATA") => Some("relationship_data"),
+        ("SNDR", "BNAM") => Some("sound_descriptor_values"),
+        ("SNDR", "LNAM") => Some("sound_loop_values"),
+        ("ARMA", "DNAM") => Some("armor_addon_data"),
+        ("ALCH", "ENIT") => Some("ingestible_effect_data"),
+        ("DIAL", "DATA") => Some("dialogue_data"),
+        ("PACK", "PKDT") => Some("package_data"),
+        ("PACK", "PSDT") => Some("package_schedule"),
+        ("PACK", "PKCU") => Some("package_counter"),
+        ("PACK", "PDTO") => Some("package_topic_data"),
+        ("ARMA", "MO2T" | "MO3T" | "MO4T" | "MO5T") | ("ALCH", "MODT") => Some("model_information"),
+        _ => None,
+    };
+    if mapped.is_some() {
+        return mapped;
+    }
+    let has = |key: &str| value.contains_key(key);
+    if has("text") {
+        return Some(if (record, signature) == ("RACE", "MTNM") {
+            "fixed_string"
+        } else {
+            "zstring"
+        });
+    }
+    if has("id") {
+        return Some(
+            if localized && is_localized_string_field(record, signature) {
+                "localized_string_id"
+            } else {
+                "form_id"
+            },
+        );
+    }
+    if has("ids") {
+        return Some("form_id_array");
+    }
+    if signature == "EDID" || is_zstring_field(record, signature) {
+        return Some("zstring");
+    }
+    if is_localized_string_field(record, signature) {
+        return Some(if localized {
+            "localized_string_id"
+        } else {
+            "zstring"
+        });
+    }
+    if is_form_id_array_field(record, signature) {
+        return Some("form_id_array");
+    }
+    if is_form_id_field(record, signature)
+        || matches!((record, signature), ("FLST", "LNAM") | ("FSTP", "DATA"))
+    {
+        return Some("form_id");
+    }
+    if is_empty_field(record, signature) {
+        return Some("empty");
+    }
+    if (record, signature) == ("TES4", "DATA") {
+        return Some("u64");
+    }
+    if matches!(
+        (record, signature),
+        ("GLOB", "FNAM") | ("PACK", "CNAM" | "XNAM") | ("LVLN" | "LVLI", "LVLD" | "LLCT")
+    ) {
+        return Some("u8");
+    }
+    if (record, signature) == ("PACK", "UNAM") {
+        return Some("i8");
+    }
+    if is_u16_field(record, signature) {
+        return Some("u16");
+    }
+    if is_i16_field(record, signature) {
+        return Some("i16");
+    }
+    if (record, signature) == ("ADDN", "DATA") || is_u32_field(record, signature) {
+        return Some("u32");
+    }
+    if matches!((record, signature), ("GLOB", "FLTV") | ("ALCH", "DATA"))
+        || is_f32_field(record, signature)
+    {
+        return Some("f32");
+    }
+    for (key, value_type) in [
+        ("item", "inventory_item"),
+        ("slots", "biped_body_template"),
+        ("damage_multiplier", "attack_data"),
+        ("modifier", "faction_relation"),
+        ("arrest", "crime_values"),
+        ("start_hour", "vendor_values"),
+        ("location_type", "location"),
+        ("min_x", "object_bounds"),
+        ("number_of_records", "plugin_header"),
+        ("weight", "item_data"),
+        ("aggression", "npc_ai_data"),
+        ("skills", "npc_player_skills"),
+        ("reference", "leveled_list_entry"),
+        ("owner", "leveled_extra_data"),
+        ("base_cost", "spell_data"),
+        ("magnitude", "effect_parameters"),
+        ("associated_item", "magic_effect_data"),
+        ("sounds", "magic_effect_sounds"),
+        ("values", "float_array"),
+        ("skill_boosts", "race_data"),
+        ("magicka_offset", "npc_configuration"),
+        ("parent", "relationship_data"),
+        ("frequency_shift_percent", "sound_descriptor_values"),
+        ("looping", "sound_loop_values"),
+        ("male_priority", "armor_addon_data"),
+        ("addiction", "ingestible_effect_data"),
+        ("do_all_before_repeating", "dialogue_data"),
+        ("general_flags", "package_data"),
+        ("month", "package_schedule"),
+        ("data_input_count", "package_counter"),
+        ("topic_type", "package_topic_data"),
+        ("textures", "model_information"),
+    ] {
+        if has(key) {
+            return Some(value_type);
+        }
+    }
+    if has("red") {
+        return Some(if has("alpha") {
+            "color_rgba"
+        } else {
+            "color_rgb_float"
+        });
+    }
+    if has("set") {
+        return Some(
+            if matches!((record, signature), ("LVLN" | "LVLI", "LVLF")) {
+                "flags8"
+            } else {
+                "flags32"
+            },
+        );
+    }
+    if !has("value") {
+        return None;
+    }
+    match (record, signature) {
+        ("TES4", "DATA") => Some("u64"),
+        ("GLOB", "FNAM") | ("PACK", "CNAM" | "XNAM") | ("LVLN" | "LVLI", "LVLD" | "LLCT") => {
+            Some("u8")
+        }
+        ("PACK", "UNAM") => Some("i8"),
+        (record, signature) if is_u16_field(record, signature) => Some("u16"),
+        (record, signature) if is_i16_field(record, signature) => Some("i16"),
+        ("ADDN", "DATA") => Some("u32"),
+        (record, signature) if is_u32_field(record, signature) => Some("u32"),
+        ("GLOB", "FLTV") | ("ALCH", "DATA") => Some("f32"),
+        (record, signature) if is_f32_field(record, signature) => Some("f32"),
+        _ => None,
+    }
 }
 
 #[cfg(test)]

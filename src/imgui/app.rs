@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 use eframe::egui;
 use tes5edit_rust_json::{
     ParseOptions, inspect_json_input, parse_file_with_options, read_json_input, to_json_pretty,
-    write_file, write_json_pack_with_options,
+    validate_plugin, write_file, write_json_pack_with_options,
 };
 
 use super::components::output_log::OutputLog;
@@ -170,10 +170,16 @@ impl App {
         let plugin = match read_json_input(&input) {
             Ok(plugin) => plugin,
             Err(error) => {
-                self.output_log.push(format!("Error: {error:#}"), None);
+                self.output_log
+                    .push(format!("Validation error: {error:#}"), None);
                 return;
             }
         };
+        if let Err(error) = validate_plugin(&plugin) {
+            self.output_log
+                .push(format!("Validation error: {error:#}"), None);
+            return;
+        }
         let fallback = input
             .file_name()
             .and_then(|s| s.to_str())

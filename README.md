@@ -43,7 +43,7 @@ The converter follows xEdit's TES5 binary layer in `Core/wbImplementation.pas` a
 - record flag `0x00040000`, a 32-bit uncompressed-size prefix, and zlib data
 - xEdit's four-byte signatures containing control bytes, including IMAD's `#00IAD` family
 
-Version-3 JSON makes `value` the single authoritative source for every subrecord. Fields backed by a verified SSEEdit definition receive an editable semantic value (for example `EDID` as a `zstring`, FLST/FSTP references as hexadecimal `form_id` values, colors as RGBA channels, and selected compound structures). Payloads whose semantic schema is not implemented yet use an explicit inline `raw_bytes` value. New exports do not create `data_ref` entries or duplicate typed values in a blob table. `text_preview` is informational. Header values, ordering, group hierarchy, unknown fields, and compression state are preserved.
+Version-3 JSON makes `value` the single authoritative source for every subrecord. Fields backed by a verified SSEEdit definition receive an editable semantic value (for example `EDID` text, FLST/FSTP hexadecimal FormIDs, colors as RGBA channels, and selected compound structures). A schema map keyed by record and subrecord signature determines and validates the binary value type, so exported values need no redundant `type` property. Payloads whose semantic schema is not implemented yet use explicit inline Base64 bytes. New exports do not create `data_ref` entries or duplicate typed values in a blob table. `text_preview` is informational. Header values, ordering, group hierarchy, unknown fields, and compression state are preserved.
 
 Schema-aware coverage includes the commonly edited fields of NPCs, leveled actors/items, magic effects, spells, outfits, armor, factions, and races. Major compound values include `NPC_.ACBS` Configuration, AI and player skills; leveled-list entries and extra data; the complete 152-byte `MGEF.DATA`; spell metadata and effect parameters; outfit item arrays; armor biped/data/rating fields; faction relations, flags, crime and vendor settings; and the complete 164-byte `RACE.DATA`, attacks, biped slots, tint references, and phoneme weights. Known fields also include xEdit's `display_name` beside their signature. Unknown bits are retained explicitly, and unsupported or context-dependent data remains in its lossless blob.
 
@@ -59,7 +59,7 @@ Numeric record/group header fields whose value is zero are omitted from JSON and
 
 The GUI's default-off byte-identical checkbox controls preservation of original compressed streams. When enabled, compressed records retain an `original_compressed_ref`; unchanged records reuse those exact bytes. Clean exports omit that reference and the writer creates a fresh valid zlib stream from the authoritative values.
 
-The GUI enables split JSON packs and default-value trimming by default. Trimming omits zero numbers, false booleans, empty strings and lists, null FormIDs, zero-only hexadecimal values, and `value` objects whose type is `empty`. Import restores omitted typed members to their binary defaults.
+The GUI enables split JSON packs and default-value trimming by default. Trimming omits zero numbers, false booleans, empty strings and lists, null FormIDs, zero-only hexadecimal values, and schema-defined empty `value` objects. Import restores omitted typed members to their binary defaults.
 
 This remains deliberately conservative rather than pretending to be xEdit's entire schema engine. The TES4 localization flag is honored: ordinary strings become editable text and localized strings become explicit string-table IDs. Resolving those IDs to translated text still requires external `.STRINGS` files. VMAD, conditions, models' opaque hash data, and a few sequence-dependent arrays remain explicit inline `raw_bytes` values until dedicated codecs are implemented.
 
@@ -76,10 +76,12 @@ The test suite recursively discovers every `.esp`, `.esm`, and `.esl` below `exa
 The same conversion engine is available for scripting:
 
 ```powershell
-tes5edit-rust-json to-json MyMod.esp MyMod.esp.json
-tes5edit-rust-json to-json-pack MyMod.esp MyMod.esp.json-pack
-tes5edit-rust-json from-json MyMod.esp.json Rebuilt.esp
+tes5edit-rust-json-cli to-json MyMod.esp MyMod.esp.json
+tes5edit-rust-json-cli to-json-pack MyMod.esp MyMod.esp.json-pack
+tes5edit-rust-json-cli from-json MyMod.esp.json Rebuilt.esp
 ```
+
+Release builds include the GUI executable, the synchronous console CLI executable, and `esp-structure-explaination.md` beside them. The dedicated CLI returns validation failures through stderr and a nonzero exit code before writing a plugin.
 
 ## Artwork credits
 

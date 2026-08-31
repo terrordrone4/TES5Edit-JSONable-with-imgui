@@ -7,20 +7,20 @@ This file describes how to create Skyrim Special Edition plugin JSON for `tes5ed
 For a nontrivial mod, start from a small valid plugin containing the desired record families:
 
 ```powershell
-tes5edit-rust-json to-json "Seed.esp" "Seed.esp.json"
+tes5edit-rust-json-cli to-json "Seed.esp" "Seed.esp.json"
 ```
 
 Edit the JSON while retaining its TES4 header, group hierarchy, record order, and any `raw_bytes` values you do not understand. Then compile it:
 
 ```powershell
-tes5edit-rust-json from-json "Seed.esp.json" "Generated.esp"
+tes5edit-rust-json-cli from-json "Seed.esp.json" "Generated.esp"
 ```
 
 The CLI also accepts a JSON-pack directory:
 
 ```powershell
-tes5edit-rust-json to-json-pack "Seed.esp" "Seed.esp.json-pack"
-tes5edit-rust-json from-json "Seed.esp.json-pack" "Generated.esp"
+tes5edit-rust-json-cli to-json-pack "Seed.esp" "Seed.esp.json-pack"
+tes5edit-rust-json-cli from-json "Seed.esp.json-pack" "Generated.esp"
 ```
 
 Always load the generated plugin in SSEEdit and check it for errors before distributing or launching the game.
@@ -53,11 +53,11 @@ A record has `kind: "record"`, a four-byte `signature`, a hexadecimal `form_id`,
   "subrecords": [
     {
       "signature": "EDID",
-      "value": { "type": "zstring", "text": "MyGeneratedKeyword" }
+      "value": { "text": "MyGeneratedKeyword" }
     },
     {
       "signature": "CNAM",
-      "value": { "type": "color_rgba", "red": 255, "alpha": 255 }
+      "value": { "red": 255, "alpha": 255 }
     }
   ]
 }
@@ -90,7 +90,6 @@ Every plugin must begin with one `TES4` record. A minimal header is:
     {
       "signature": "HEDR",
       "value": {
-        "type": "plugin_header",
         "version": 1.7,
         "next_object_id": "0x00000800"
       }
@@ -127,24 +126,22 @@ Each subrecord has a four-byte `signature` and one authoritative `value`:
 {
   "signature": "EDID",
   "display_name": "Editor ID",
-  "value": { "type": "zstring", "text": "ExampleEditorID" }
+  "value": { "text": "ExampleEditorID" }
 }
 ```
 
 Frequently useful value shapes include:
 
 ```json
-{ "type": "form_id", "id": "0x01000800" }
-{ "type": "form_id_array", "ids": ["0x01000800", "0x01000801"] }
-{ "type": "u8", "value": 1 }
-{ "type": "u16", "value": 10 }
-{ "type": "u32", "value": 100 }
-{ "type": "i32", "value": -1 }
-{ "type": "f32", "value": 1.5 }
-{ "type": "zstring", "text": "EditorText" }
-{ "type": "localized_string_id", "id": "0x00000123" }
-{ "type": "empty" }
+{ "id": "0x01000800" }
+{ "ids": ["0x01000800", "0x01000801"] }
+{ "value": 100 }
+{ "value": 1.5 }
+{ "text": "EditorText" }
+{ "id": "0x00000123" }
 ```
+
+The JSON does not carry a redundant `type` property. The importer obtains the exact binary value type from its schema map keyed by record and subrecord signature. Consequently, `{ "value": 1 }` is encoded as `u8`, `u16`, `u32`, `i32`, or `f32` according to its field definition rather than by guessing from the JSON number.
 
 The accepted type is contextual. For example, `FLST.LNAM` accepts `form_id`, while `GLOB.FLTV` accepts `f32`. A type that is valid elsewhere will be rejected when it does not match the record and subrecord.
 
@@ -153,7 +150,7 @@ Unknown data is explicit and inline:
 ```json
 {
   "signature": "VMAD",
-  "value": { "type": "raw_bytes", "base64": "..." }
+  "value": { "base64": "..." }
 }
 ```
 
@@ -170,7 +167,7 @@ Trimmed JSON may omit typed members whose value is binary-default-like:
 - a hexadecimal string containing only zero bits;
 - the entire `value` property for a schema-defined empty subrecord.
 
-The importer restores these omitted members to zero, false, or empty. Do not omit required non-default values. The `type` discriminator itself is never optional, except when a schema-defined `empty` value is represented by the absence of `value`.
+The importer restores these omitted members to zero, false, or empty. Do not omit required non-default values. A schema-defined empty subrecord is represented by the absence of `value`.
 
 ## Compression and exact bytes
 
@@ -192,7 +189,6 @@ This creates a structurally minimal ESP containing only its TES4 header:
         {
           "signature": "HEDR",
           "value": {
-            "type": "plugin_header",
             "version": 1.7,
             "next_object_id": "0x00000800"
           }
@@ -206,7 +202,7 @@ This creates a structurally minimal ESP containing only its TES4 header:
 Save it as `Generated.esp.json`, then run:
 
 ```powershell
-tes5edit-rust-json from-json "Generated.esp.json" "Generated.esp"
+tes5edit-rust-json-cli from-json "Generated.esp.json" "Generated.esp"
 ```
 
 For real content, export a seed plugin and add records inside its existing family groups. This avoids accidental mistakes in header flags, master indexing, group labels, and record ordering.

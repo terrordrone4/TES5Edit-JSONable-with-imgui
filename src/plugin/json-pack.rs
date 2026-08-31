@@ -7,7 +7,10 @@ use std::{
 use anyhow::{Context, Result, bail, ensure};
 use serde::{Deserialize, Serialize};
 
-use super::{Element, Plugin, to_json_pretty};
+use super::{
+    Element, Plugin, plugin_from_json_slice, plugin_from_json_slice_with_localization,
+    to_json_pretty,
+};
 
 const MANIFEST_NAME: &str = "pack-manifest.json";
 const BLOBS_NAME: &str = "__blobs__.json";
@@ -31,6 +34,8 @@ struct PackManifest {
     source_file: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     blob_file: Option<String>,
+    #[serde(default)]
+    localized: bool,
     fragments: Vec<PackFragment>,
 }
 
@@ -98,6 +103,14 @@ pub fn write_json_pack_with_options(
         format: "tes5edit-rust-json-pack/v1".into(),
         source_file: plugin.source_file.clone(),
         blob_file: has_blobs.then(|| BLOBS_NAME.into()),
+        localized: plugin
+            .elements
+            .first()
+            .and_then(|element| match element {
+                Element::Record(record) if record.signature == "TES4" => Some(record.flags),
+                _ => None,
+            })
+            .is_some_and(|flags| flags & 0x80 != 0),
         fragments,
     };
     if has_blobs {
@@ -120,7 +133,7 @@ pub fn write_json_pack_with_options(
 pub fn read_json_input(path: impl AsRef<Path>) -> Result<Plugin> {
     let path = path.as_ref();
     if path.is_file() {
-        return serde_json::from_slice(&fs::read(path)?)
+        return plugin_from_json_slice(&fs::read(path)?)
             .with_context(|| format!("reading JSON file {}", path.display()));
     }
     ensure!(
@@ -152,8 +165,11 @@ pub fn read_json_input(path: impl AsRef<Path>) -> Result<Plugin> {
     let mut plugin_format = None;
     for entry in &manifest.fragments {
         let fragment_path = path.join(&entry.file);
-        let fragment: Plugin = serde_json::from_slice(&fs::read(&fragment_path)?)
-            .with_context(|| format!("reading pack fragment {}", fragment_path.display()))?;
+        let fragment: Plugin = plugin_from_json_slice_with_localization(
+            &fs::read(&fragment_path)?,
+            Some(manifest.localized),
+        )
+        .with_context(|| format!("reading pack fragment {}", fragment_path.display()))?;
         ensure!(
             fragment
                 .elements

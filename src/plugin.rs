@@ -32,13 +32,155 @@ pub use read::{ParseOptions, parse_file_with_options};
 pub use value_codec::SubrecordValue;
 pub use write::write_file;
 
+pub fn validate_plugin(plugin: &Plugin) -> Result<()> {
+    ensure!(
+        matches!(
+            plugin.format.as_str(),
+            "tes5edit-rust-json/v2" | "tes5edit-rust-json/v3"
+        ),
+        "unsupported JSON format {}",
+        plugin.format
+    );
+    ensure!(
+        matches!(plugin.elements.first(), Some(Element::Record(record)) if record.signature == "TES4"),
+        "plugin JSON must begin with a TES4 record"
+    );
+    let mut encoded = Vec::new();
+    write_elements(&plugin.elements, &plugin.blobs, &mut encoded)
+}
+
 pub fn to_json_pretty(plugin: &Plugin, trim_default_values: bool) -> Result<Vec<u8>> {
-    if !trim_default_values {
-        return Ok(serde_json::to_vec_pretty(plugin)?);
-    }
     let mut json = serde_json::to_value(plugin)?;
-    trim_json_defaults(&mut json);
+    if trim_default_values {
+        trim_json_defaults(&mut json);
+    }
+    remove_value_type_tags(&mut json);
     Ok(serde_json::to_vec_pretty(&json)?)
+}
+
+pub(crate) fn plugin_from_json_slice(bytes: &[u8]) -> Result<Plugin> {
+    plugin_from_json_slice_with_localization(bytes, None)
+}
+
+pub(crate) fn plugin_from_json_slice_with_localization(
+    bytes: &[u8],
+    localized_override: Option<bool>,
+) -> Result<Plugin> {
+    let mut json: serde_json::Value = serde_json::from_slice(bytes)?;
+    let localized = localized_override.unwrap_or_else(|| {
+        json.get("elements")
+            .and_then(serde_json::Value::as_array)
+            .and_then(|elements| elements.first())
+            .and_then(|element| element.get("flags"))
+            .and_then(serde_json::Value::as_u64)
+            .is_some_and(|flags| flags & 0x80 != 0)
+    });
+    normalize_value_type_tags(&mut json, localized)?;
+    Ok(serde_json::from_value(json)?)
+}
+
+fn remove_value_type_tags(json: &mut serde_json::Value) {
+    match json {
+        serde_json::Value::Array(values) => {
+            for value in values {
+                remove_value_type_tags(value);
+            }
+        }
+        serde_json::Value::Object(object) => {
+            if let Some(value) = object
+                .get_mut("value")
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                value.remove("type");
+            }
+            for value in object.values_mut() {
+                remove_value_type_tags(value);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn normalize_value_type_tags(json: &mut serde_json::Value, localized: bool) -> Result<()> {
+    fn visit(elements: &mut [serde_json::Value], localized: bool) -> Result<()> {
+        for element in elements {
+            let object = element
+                .as_object_mut()
+                .context("element must be an object")?;
+            match object.get("kind").and_then(serde_json::Value::as_str) {
+                Some("group") => {
+                    let children = object
+                        .get_mut("elements")
+                        .and_then(serde_json::Value::as_array_mut)
+                        .context("group elements must be an array")?;
+                    visit(children, localized)?;
+                }
+                Some("record") => {
+                    let record = object
+                        .get("signature")
+                        .and_then(serde_json::Value::as_str)
+                        .context("record signature must be a string")?
+                        .to_owned();
+                    let subrecords = object
+                        .get_mut("subrecords")
+                        .and_then(serde_json::Value::as_array_mut)
+                        .context("record subrecords must be an array")?;
+                    for subrecord in subrecords {
+                        let subrecord = subrecord
+                            .as_object_mut()
+                            .context("subrecord must be an object")?;
+                        let signature = subrecord
+                            .get("signature")
+                            .and_then(serde_json::Value::as_str)
+                            .context("subrecord signature must be a string")?
+                            .to_owned();
+                        let Some(value) = subrecord.get_mut("value") else {
+                            continue;
+                        };
+                        if !value.is_object() {
+                            let original = std::mem::take(value);
+                            let mut wrapped = serde_json::Map::new();
+                            let mut probe = serde_json::Map::new();
+                            probe.insert("value".into(), original.clone());
+                            let value_type = value_codec::infer_json_value_type(
+                                &record, &signature, localized, &probe,
+                            )
+                            .with_context(|| {
+                                format!("cannot infer value type for {record}.{signature}")
+                            })?;
+                            let field = match value_type {
+                                "zstring" | "fixed_string" => "text",
+                                "form_id" | "localized_string_id" => "id",
+                                "form_id_array" => "ids",
+                                _ => "value",
+                            };
+                            wrapped.insert(field.into(), original);
+                            *value = serde_json::Value::Object(wrapped);
+                        }
+                        let value = value.as_object_mut().unwrap();
+                        if value.contains_key("type") {
+                            continue;
+                        }
+                        let value_type = value_codec::infer_json_value_type(
+                            &record, &signature, localized, value,
+                        )
+                        .with_context(|| {
+                            format!("cannot infer value type for {record}.{signature}")
+                        })?;
+                        value.insert("type".into(), serde_json::Value::String(value_type.into()));
+                    }
+                }
+                _ => bail!("element kind must be record or group"),
+            }
+        }
+        Ok(())
+    }
+
+    let elements = json
+        .get_mut("elements")
+        .and_then(serde_json::Value::as_array_mut)
+        .context("plugin elements must be an array")?;
+    visit(elements, localized)
 }
 
 fn trim_json_defaults(json: &mut serde_json::Value) {
@@ -62,7 +204,9 @@ fn trim_json_defaults(json: &mut serde_json::Value) {
                 trim_json_defaults(value);
             }
             if object.contains_key("type") {
-                object.retain(|key, value| key == "type" || !is_json_default(value));
+                object.retain(|key, value| {
+                    key == "type" || key == "base64" || !is_json_default(value)
+                });
             }
         }
         _ => {}
@@ -866,9 +1010,10 @@ mod tests {
         let json = to_json_pretty(&plugin, true).unwrap();
         let text = String::from_utf8(json.clone()).unwrap();
         assert!(!text.contains("\"type\": \"empty\""));
+        assert!(!text.contains("\"type\":"));
         assert!(text.len() < serde_json::to_vec_pretty(&plugin).unwrap().len());
 
-        let trimmed: Plugin = serde_json::from_slice(&json).unwrap();
+        let trimmed = plugin_from_json_slice(&json).unwrap();
         let mut rebuilt = Vec::new();
         write_elements(&trimmed.elements, &trimmed.blobs, &mut rebuilt).unwrap();
         assert_eq!(rebuilt, original);
@@ -910,5 +1055,26 @@ mod tests {
         assert!(
             matches!(parsed.first(), Some(Element::Record(record)) if record.signature == "TES4")
         );
+    }
+
+    #[test]
+    fn type_free_json_is_mapped_and_invalid_shapes_are_rejected() {
+        let valid = br#"{
+          "format":"tes5edit-rust-json/v3",
+          "elements":[{"kind":"record","signature":"TES4","subrecords":[
+            {"signature":"HEDR","value":{"version":1.7,"next_object_id":"0x800"}}
+          ]}]
+        }"#;
+        let plugin = plugin_from_json_slice(valid).unwrap();
+        validate_plugin(&plugin).unwrap();
+
+        let invalid = br#"{
+          "format":"tes5edit-rust-json/v3",
+          "elements":[{"kind":"record","signature":"TES4","subrecords":[
+            {"signature":"HEDR","value":{"value":1}}
+          ]}]
+        }"#;
+        let error = plugin_from_json_slice(invalid).unwrap_err().to_string();
+        assert!(error.contains("unknown field `value`"), "{error}");
     }
 }

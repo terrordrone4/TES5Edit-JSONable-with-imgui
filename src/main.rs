@@ -9,7 +9,10 @@ use std::{
 };
 
 use eframe::egui;
-use tes5edit_rust_json::{Plugin, parse_file, read_json_input, write_file, write_json_pack};
+use tes5edit_rust_json::{
+    Plugin, parse_file, read_json_input, to_json_pretty, validate_plugin, write_file,
+    write_json_pack,
+};
 
 #[derive(Default)]
 struct App {
@@ -207,7 +210,7 @@ fn run_cli() -> anyhow::Result<()> {
     match args[0].to_string_lossy().as_ref() {
         "to-json" => {
             let plugin = parse_file(&args[1])?;
-            fs::write(&args[2], serde_json::to_vec_pretty(&plugin)?)?;
+            fs::write(&args[2], to_json_pretty(&plugin, false)?)?;
         }
         "to-json-pack" => {
             let plugin = parse_file(&args[1])?;
@@ -215,6 +218,7 @@ fn run_cli() -> anyhow::Result<()> {
         }
         "from-json" => {
             let plugin = read_json_input(&args[1])?;
+            validate_plugin(&plugin)?;
             write_file(&plugin, &args[2])?;
         }
         command => anyhow::bail!("unknown command {command:?}"),
