@@ -873,4 +873,42 @@ mod tests {
         write_elements(&trimmed.elements, &trimmed.blobs, &mut rebuilt).unwrap();
         assert_eq!(rebuilt, original);
     }
+
+    #[test]
+    fn llm_guide_minimal_plugin_example_compiles() {
+        let json = br#"{
+          "format": "tes5edit-rust-json/v3",
+          "source_file": "Generated.esp",
+          "elements": [{
+            "kind": "record",
+            "signature": "TES4",
+            "subrecords": [{
+              "signature": "HEDR",
+              "value": {
+                "type": "plugin_header",
+                "version": 1.7,
+                "next_object_id": "0x00000800"
+              }
+            }]
+          }]
+        }"#;
+        let plugin: Plugin = serde_json::from_slice(json).unwrap();
+        let mut bytes = Vec::new();
+        write_elements(&plugin.elements, &plugin.blobs, &mut bytes).unwrap();
+
+        let mut blobs = BTreeMap::new();
+        let mut next_blob = 1;
+        let parsed = parse_elements(
+            &bytes,
+            "LLM guide minimal example",
+            false,
+            false,
+            &mut blobs,
+            &mut next_blob,
+        )
+        .unwrap();
+        assert!(
+            matches!(parsed.first(), Some(Element::Record(record)) if record.signature == "TES4")
+        );
+    }
 }
