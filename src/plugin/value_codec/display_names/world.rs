@@ -1,5 +1,6 @@
 pub(super) fn get(record: &str, signature: &str) -> Option<&'static str> {
     match (record, signature) {
+        ("QUST", "VMAD") => Some("Virtual Machine Adapter"),
         ("FACT", "DATA") => Some("Flags"),
         ("FACT", "CRVA") => Some("Crime Values"),
         ("FACT", "VENV") => Some("Vendor Values"),

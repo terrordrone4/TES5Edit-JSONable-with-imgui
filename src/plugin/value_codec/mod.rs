@@ -4,6 +4,9 @@ use serde::{Deserialize, Serialize};
 
 mod display_names;
 mod fields;
+mod vmad;
+
+pub use vmad::QuestVmad;
 
 use fields::{
     is_empty as is_empty_field, is_f32 as is_f32_field, is_form_id as is_form_id_field,
@@ -685,6 +688,10 @@ pub enum SubrecordValue {
         #[serde(default)]
         addon_nodes: Vec<u32>,
     },
+    QuestVirtualMachineAdapter {
+        #[serde(flatten)]
+        vmad: QuestVmad,
+    },
 }
 
 const NPC_FLAG_NAMES: &[(u32, &str)] = &[
@@ -916,6 +923,7 @@ pub(crate) fn infer_json_value_type(
     }
     let mapped = match (record, signature) {
         ("TES4", "HEDR") => Some("plugin_header"),
+        ("QUST", "VMAD") => Some("quest_virtual_machine_adapter"),
         (_, "OBND") => Some("object_bounds"),
         ("ARMO" | "ARMA" | "RACE", "BOD2") => Some("biped_body_template"),
         ("NPC_" | "RACE", "ATKD") => Some("attack_data"),
@@ -1148,6 +1156,8 @@ pub fn decode_with_localization(
             number_of_records: read_u32(bytes, 4),
             next_object_id: hex_u32(read_u32(bytes, 8)),
         }),
+        ("QUST", "VMAD", _) => vmad::decode_quest(bytes)
+            .map(|vmad| SubrecordValue::QuestVirtualMachineAdapter { vmad }),
         ("TES4", "DATA", 8) => Some(SubrecordValue::U64 {
             value: u64::from_le_bytes(bytes.try_into().ok()?),
         }),
@@ -1667,6 +1677,11 @@ pub fn encode(record: &str, signature: &str, value: &SubrecordValue) -> Result<V
         SubrecordValue::RawBytes { base64 } => BASE64
             .decode(base64)
             .with_context(|| format!("invalid raw_bytes base64 in {record}.{signature}")),
+        SubrecordValue::QuestVirtualMachineAdapter { vmad }
+            if (record, signature) == ("QUST", "VMAD") =>
+        {
+            vmad::encode_quest(vmad)
+        }
         SubrecordValue::Zstring { text } => {
             ensure!(
                 signature == "EDID"

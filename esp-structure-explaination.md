@@ -156,6 +156,43 @@ Unknown data is explicit and inline:
 
 Never invent `raw_bytes`. Preserve it from an exported plugin unless you have implemented the exact binary schema independently.
 
+### Quest Papyrus scripts (`QUST.VMAD`)
+
+Quest VMAD is editable as Papyrus scripts and property bindings. The field schema supplies the omitted outer value type:
+
+```json
+{
+  "signature": "VMAD",
+  "display_name": "Virtual Machine Adapter",
+  "value": {
+    "version": 5,
+    "object_format": 2,
+    "scripts": [{
+      "script_name": "MyQuestScript",
+      "flags": "local",
+      "properties": [
+        {
+          "property_name": "Target",
+          "property_type": "object",
+          "value": {
+            "object": { "form_id": "0x01000800" }
+          }
+        },
+        {
+          "property_name": "Names",
+          "property_type": "string_array",
+          "flags": "none",
+          "value": { "strings": ["A", "B"] }
+        }
+      ]
+    }],
+    "aliases": []
+  }
+}
+```
+
+Script flags are `local`, `inherited`, `removed`, or `inherited_and_removed`. Property flags are `none`, `edited`, `unknown_2`, or `removed`; `edited` is the default and may be omitted. Property types are `none`, `object`, `string`, `int32`, `float`, `bool`, and their five array forms: `object_array`, `string_array`, `int32_array`, `float_array`, `bool_array`. Each property value must use the member matching `property_type`; mismatches fail validation before ESP output is written. Object format 2 stores `{ form_id, alias }` in xEdit's current layout. Object `alias` defaults to `-1`, and the reserved `unused` bytes default to `0x0000`, so both may be omitted. Non-default values are emitted and preserved. Exported quests may additionally contain `quest_fragments` and alias entries with their own bound script lists.
+
 ## Default-value trimming
 
 Trimmed JSON may omit typed members whose value is binary-default-like:
